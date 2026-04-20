@@ -1,18 +1,70 @@
-# Node modules
+# ========================
+# Dependencies
+# ========================
 node_modules/
 
-# Playwright output
+# ========================
+# Playwright outputs
+# ========================
 test-results/
 playwright-report/
 blob-report/
+playwright/.cache/
+playwright/.auth/
+playwright-output/
+playwright/.temp/
 
+# ========================
 # Environment files
+# ========================
 .env
+.env.*
+!.env.example
 
+# ========================
+# Authentication / session state
+# ========================
+storageState.json
+storage/
+auth.json
+
+# ========================
+# Allure reporting
+# ========================
+allure-results/
+allure-report/
+
+# ========================
+# Coverage / test artifacts (future-proof)
+# ========================
+coverage/
+*.lcov
+
+# ========================
 # Logs
+# ========================
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+logs/
 
-# OS files
+# ========================
+# OS / IDE files
+# ========================
 .DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ========================
+# TypeScript build output (if added later)
+# ========================
+dist/
+build/
+
+# ========================
+# Misc
+# ========================
+*.tmp
+*.temp

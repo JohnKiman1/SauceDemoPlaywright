@@ -1,0 +1,51 @@
+{
+  "name": "SauceDemo",
+  "version": "1.0.0",
+  "description": "Playwright automation framework for SauceDemo (Enterprise SDET Architecture)",
+  "main": "index.js",
+  "scripts": {
+    "test": "playwright test",
+    "test:ci": "CI=true playwright test",
+
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+
+    "test:chromium": "playwright test --project=smoke-chromium",
+    "test:firefox": "playwright test --project=regression-firefox",
+    "test:webkit": "playwright test --project=regression-webkit",
+
+    "test:smoke": "playwright test --grep @smoke",
+    "test:regression": "playwright test --grep @regression",
+    "test:e2e": "playwright test --grep @e2e",
+
+    "report:html": "playwright show-report",
+
+    "allure:generate": "allure generate allure-results -o allure-report --clean",
+    "allure:open": "allure open allure-report",
+    "allure:serve": "allure serve allure-results",
+    "allure:publish": "npm run allure:generate && gh-pages -d allure-report",
+
+    "setup": "playwright install --with-deps"
+  },
+  "keywords": [
+    "playwright",
+    "automation",
+    "testing",
+    "saucedemo",
+    "sdet",
+    "qa",
+    "ci-cd",
+    "allure"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "@types/node": "^25.6.0",
+    "allure-commandline": "^2.38.1",
+    "allure-playwright": "^3.7.1",
+    "dotenv": "^17.4.2",
+    "gh-pages": "^6.1.1"
+  }
+}

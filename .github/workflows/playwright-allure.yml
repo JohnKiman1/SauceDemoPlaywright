@@ -1,0 +1,78 @@
+name: Playwright + Allure CI Dashboard
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      # =========================
+      # CHECKOUT CODE
+      # =========================
+      - uses: actions/checkout@v4
+
+      # =========================
+      # NODE SETUP
+      # =========================
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      # =========================
+      # INSTALL DEPENDENCIES
+      # =========================
+      - name: Install dependencies
+        run: npm install
+
+      # =========================
+      # INSTALL PLAYWRIGHT BROWSERS
+      # =========================
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      # =========================
+      # RUN TESTS
+      # =========================
+      - name: Run Playwright tests
+        run: npm run test:ci
+
+      # =========================
+      # GENERATE ALLURE REPORT
+      # =========================
+      - name: Generate Allure report
+        if: always()
+        run: npm run allure:generate
+
+      # =========================
+      # UPLOAD PLAYWRIGHT REPORT
+      # =========================
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+
+      # =========================
+      # UPLOAD ALLURE RESULTS
+      # =========================
+      - name: Upload Allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results
+          path: allure-results/
+
+      # =========================
+      # DEPLOY ALLURE DASHBOARD
+      # =========================
+      - name: Deploy Allure Report to GitHub Pages
+        if: github.ref == 'refs/heads/main'
+        run: npm run allure:publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
