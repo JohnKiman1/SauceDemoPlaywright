@@ -14,13 +14,15 @@ export default defineConfig({
   testDir: './tests',
   testMatch: /.*\.spec\.ts/,
 
-  // ✅ FIX: safer + ESM compatible
-  globalSetup: './global-setup',
+  // =========================
+  // GLOBAL SETUP
+  // =========================
+  globalSetup: require.resolve('./global-setup'),
 
   // =========================
   // EXECUTION STRATEGY
   // =========================
-  fullyParallel: !isCI, // avoid instability in CI
+  fullyParallel: !isCI,
   forbidOnly: isCI,
 
   retries: isCI ? 2 : 0,
@@ -45,35 +47,19 @@ export default defineConfig({
   reporter: [
     ['list'],
 
-    [
-      'html',
-      {
-        open: isCI ? 'never' : 'on-failure',
-      },
-    ],
+    ['html', {
+      open: isCI ? 'never' : 'on-failure',
+    }],
 
-    [
-      'allure-playwright',
-      {
-        outputFolder: 'allure-results',
-        detail: true,
-        suiteTitle: true,
-      },
-    ],
+    ['allure-playwright', {
+      outputFolder: 'allure-results',
+      detail: true,
+      suiteTitle: true,
+    }],
   ],
 
   // =========================
-  // METADATA (USED BY ALLURE)
-  // =========================
-  metadata: {
-    framework: 'Playwright',
-    architecture: 'SDET Enterprise',
-    environment: isCI ? 'CI' : 'LOCAL',
-    baseURL: process.env.BASE_URL || 'https://www.saucedemo.com',
-  },
-
-  // =========================
-  // GLOBAL SETTINGS
+  // GLOBAL TEST SETTINGS
   // =========================
   use: {
     baseURL: process.env.BASE_URL || 'https://www.saucedemo.com',
