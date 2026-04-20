@@ -15,39 +15,50 @@ export default async function globalSetup(_config: FullConfig) {
 
   console.log('[globalSetup] Starting authentication flow...');
 
-  const browser = await chromium.launch();
-  const page = await browser.newPage();
+  const browser = await chromium.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-dev-shm-usage'],
+  });
+
+  const context = await browser.newContext();
+  const page = await context.newPage();
 
   try {
     // =========================
     // NAVIGATE
     // =========================
-    await page.goto(baseURL, { waitUntil: 'domcontentloaded' });
+    await page.goto(baseURL, {
+      waitUntil: 'domcontentloaded',
+      timeout: 20000,
+    });
 
     // =========================
-    // LOGIN
+    // LOGIN LOCATORS (SAFE MODE)
     // =========================
-    await page.fill(
-      '[data-test="username"]',
-      process.env.USERNAME || 'standard_user'
-    );
+    const username = process.env.USERNAME ?? 'standard_user';
+    const password = process.env.PASSWORD ?? 'secret_sauce';
 
-    await page.fill(
-      '[data-test="password"]',
-      process.env.PASSWORD || 'secret_sauce'
-    );
+    await page.locator('[data-test="username"]').waitFor({ state: 'visible' });
+    await page.fill('[data-test="username"]', username);
 
-    await page.click('[data-test="login-button"]');
+    await page.fill('[data-test="password"]', password);
+
+    await Promise.all([
+      page.waitForURL('**/inventory.html', { timeout: 20000 }),
+      page.click('[data-test="login-button"]'),
+    ]);
 
     // =========================
-    // VERIFY LOGIN SUCCESS
+    // VALIDATE LOGIN SUCCESS
     // =========================
-    await page.waitForURL('**/inventory.html', { timeout: 20000 });
+    if (!page.url().includes('inventory.html')) {
+      throw new Error('[globalSetup] Login failed - inventory page not reached');
+    }
 
     // =========================
     // SAVE STORAGE STATE
     // =========================
-    await page.context().storageState({
+    await context.storageState({
       path: storagePath,
     });
 
