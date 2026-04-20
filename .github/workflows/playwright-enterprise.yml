@@ -9,7 +9,7 @@ on:
 jobs:
 
   # ==========================================
-  # TEST EXECUTION (SHARDED)
+  # JOB 1: TEST EXECUTION (SHARDED)
   # ==========================================
   test:
     name: E2E Tests
@@ -22,23 +22,29 @@ jobs:
         shard: [1, 2]
 
     steps:
+      # =========================
+      # CHECKOUT
+      # =========================
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # =========================
+      # NODE SETUP
+      # =========================
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
-          cache: pnpm
+          cache: npm
 
       # =========================
-      # FIXED TOOLCHAIN (COREPACK ONLY)
+      # PNPM (FULLY RELIABLE FIX)
       # =========================
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Activate PNPM
-        run: corepack prepare pnpm@latest --activate
+      - name: Enable Corepack + PNPM
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.0.0 --activate
+          pnpm -v
 
       # =========================
       # INSTALL DEPENDENCIES
@@ -47,19 +53,19 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # =========================
-      # PLAYWRIGHT BROWSERS
+      # INSTALL PLAYWRIGHT BROWSERS
       # =========================
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps
 
       # =========================
-      # PREP STORAGE
+      # STORAGE SETUP
       # =========================
       - name: Ensure storage directory
         run: mkdir -p storage
 
       # =========================
-      # RUN TESTS
+      # RUN TESTS (SHARDED)
       # =========================
       - name: Run Playwright tests
         run: pnpm exec playwright test --shard=${{ matrix.shard }}/2
@@ -70,7 +76,7 @@ jobs:
           PASSWORD: secret_sauce
 
       # =========================
-      # ALLURE RAW RESULTS
+      # UPLOAD ALLURE RESULTS
       # =========================
       - name: Upload Allure Results
         if: always()
@@ -82,7 +88,7 @@ jobs:
 
 
   # ==========================================
-  # ALLURE MERGE + REPORT
+  # JOB 2: ALLURE MERGE REPORT
   # ==========================================
   allure-report:
     name: Allure Report (Merged)
@@ -91,20 +97,32 @@ jobs:
     if: always()
 
     steps:
+      # =========================
+      # CHECKOUT
+      # =========================
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # =========================
+      # NODE SETUP
+      # =========================
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
 
-      - name: Enable Corepack
-        run: corepack enable
+      # =========================
+      # PNPM FIX
+      # =========================
+      - name: Enable Corepack + PNPM
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.0.0 --activate
+          pnpm -v
 
-      - name: Activate PNPM
-        run: corepack prepare pnpm@latest --activate
-
+      # =========================
+      # INSTALL DEPS
+      # =========================
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -130,7 +148,7 @@ jobs:
         run: pnpm exec allure generate allure-results-merged --clean -o allure-report
 
       # =========================
-      # PUBLISH ARTIFACT
+      # UPLOAD REPORT
       # =========================
       - name: Upload Allure Report
         uses: actions/upload-artifact@v4
