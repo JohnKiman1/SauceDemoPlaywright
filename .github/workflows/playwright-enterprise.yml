@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1/2, 2/2]
+        shard: [1, 2]
 
     steps:
       - name: Checkout repository
@@ -29,7 +29,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
-          cache: 'pnpm'
+          cache: pnpm
 
       - name: Install PNPM
         run: npm install -g pnpm
@@ -40,22 +40,25 @@ jobs:
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps
 
-      # ✅ CRITICAL FIX
       - name: Ensure storage directory
         run: mkdir -p storage
 
-      # ✅ RUN TESTS PER SHARD
+      # =========================
+      # IMPORTANT: ENV FIX
+      # =========================
       - name: Run Playwright tests
-        run: pnpm exec playwright test --shard=${{ matrix.shard }}
+        run: pnpm exec playwright test --shard=${{ matrix.shard }}/2
         env:
           CI: true
+          BASE_URL: https://www.saucedemo.com
+          USERNAME: standard_user
+          PASSWORD: secret_sauce
 
-      # ✅ Upload RAW Allure Results (NOT report)
       - name: Upload Allure Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: allure-results-${{ matrix.shard }}
+          name: allure-results-shard-${{ matrix.shard }}
           path: allure-results/
           retention-days: 7
 
@@ -67,6 +70,7 @@ jobs:
     name: Allure Report (Merged)
     runs-on: ubuntu-latest
     needs: test
+    if: always()
 
     steps:
       - name: Checkout repository
@@ -84,18 +88,18 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # =========================
-      # Download shard results
+      # Download shards safely
       # =========================
-      - name: Download Allure Results (Shard 1)
+      - name: Download Shard 1
         uses: actions/download-artifact@v4
         with:
-          name: allure-results-1/2
+          name: allure-results-shard-1
           path: allure-results-merged
 
-      - name: Download Allure Results (Shard 2)
+      - name: Download Shard 2
         uses: actions/download-artifact@v4
         with:
-          name: allure-results-2/2
+          name: allure-results-shard-2
           path: allure-results-merged
 
       # =========================
@@ -105,7 +109,7 @@ jobs:
         run: pnpm exec allure generate allure-results-merged --clean -o allure-report
 
       # =========================
-      # Upload final dashboard
+      # Upload dashboard
       # =========================
       - name: Upload Allure Report
         uses: actions/upload-artifact@v4
