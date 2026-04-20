@@ -38,13 +38,13 @@ jobs:
           cache: npm
 
       # =========================
-      # PNPM (FULLY RELIABLE FIX)
+      # FIXED PNPM INSTALL (ROBUST)
       # =========================
-      - name: Enable Corepack + PNPM
-        run: |
-          corepack enable
-          corepack prepare pnpm@9.0.0 --activate
-          pnpm -v
+      - name: Install PNPM
+        run: npm install -g pnpm@9
+
+      - name: Verify PNPM
+        run: pnpm -v
 
       # =========================
       # INSTALL DEPENDENCIES
@@ -53,7 +53,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # =========================
-      # INSTALL PLAYWRIGHT BROWSERS
+      # PLAYWRIGHT BROWSERS
       # =========================
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps
@@ -76,7 +76,7 @@ jobs:
           PASSWORD: secret_sauce
 
       # =========================
-      # UPLOAD ALLURE RESULTS
+      # ALLURE RESULTS
       # =========================
       - name: Upload Allure Results
         if: always()
@@ -110,18 +110,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
+          cache: npm
 
       # =========================
-      # PNPM FIX
+      # INSTALL PNPM
       # =========================
-      - name: Enable Corepack + PNPM
-        run: |
-          corepack enable
-          corepack prepare pnpm@9.0.0 --activate
-          pnpm -v
+      - name: Install PNPM
+        run: npm install -g pnpm@9
+
+      - name: Verify PNPM
+        run: pnpm -v
 
       # =========================
-      # INSTALL DEPS
+      # INSTALL DEPENDENCIES
       # =========================
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
