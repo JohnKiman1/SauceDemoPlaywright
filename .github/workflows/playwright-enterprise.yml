@@ -1,0 +1,115 @@
+name: Playwright Enterprise Tests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+
+  # ==========================================
+  # JOB 1: RUN TESTS (SHARDED)
+  # ==========================================
+  test:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1/2, 2/2]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'pnpm'
+
+      - name: Install PNPM
+        run: npm install -g pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install --with-deps
+
+      # ✅ CRITICAL FIX
+      - name: Ensure storage directory
+        run: mkdir -p storage
+
+      # ✅ RUN TESTS PER SHARD
+      - name: Run Playwright tests
+        run: pnpm exec playwright test --shard=${{ matrix.shard }}
+        env:
+          CI: true
+
+      # ✅ Upload RAW Allure Results (NOT report)
+      - name: Upload Allure Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-${{ matrix.shard }}
+          path: allure-results/
+          retention-days: 7
+
+
+  # ==========================================
+  # JOB 2: MERGE + GENERATE ALLURE REPORT
+  # ==========================================
+  allure-report:
+    name: Allure Report (Merged)
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install PNPM
+        run: npm install -g pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # =========================
+      # Download shard results
+      # =========================
+      - name: Download Allure Results (Shard 1)
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-results-1/2
+          path: allure-results-merged
+
+      - name: Download Allure Results (Shard 2)
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-results-2/2
+          path: allure-results-merged
+
+      # =========================
+      # Generate merged report
+      # =========================
+      - name: Generate Allure Report
+        run: pnpm exec allure generate allure-results-merged --clean -o allure-report
+
+      # =========================
+      # Upload final dashboard
+      # =========================
+      - name: Upload Allure Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: allure-report/
+          retention-days: 7
