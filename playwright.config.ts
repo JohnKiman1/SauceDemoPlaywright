@@ -2,12 +2,15 @@ import { defineConfig, devices } from '@playwright/test';
 import dotenv from 'dotenv';
 import path from 'node:path';
 
-dotenv.config({ path: path.resolve(__dirname, '.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 const isCI = !!process.env.CI;
 
-export default defineConfig({
+// 🔥 FIX: match globalSetup shard file
+const shardId = process.env.GITHUB_RUN_ID || 'local';
+const storageStatePath = `storage/auth-${shardId}.json`;
 
+export default defineConfig({
   testDir: './tests',
   testMatch: /.*\.spec\.ts/,
 
@@ -42,8 +45,8 @@ export default defineConfig({
   use: {
     baseURL: process.env.BASE_URL || 'https://www.saucedemo.com',
 
-    // 🔥 FIX: REMOVE SHARED STATE (CRITICAL FOR SHARDS)
-    storageState: undefined,
+    // 🔥 FIX: shard-safe auth state
+    storageState: storageStatePath,
 
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
