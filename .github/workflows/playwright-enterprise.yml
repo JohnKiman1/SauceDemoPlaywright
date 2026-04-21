@@ -13,9 +13,9 @@ permissions:
 
 jobs:
 
-  # ==========================================
-  # JOB 1: TEST EXECUTION (OPTIMIZED)
-  # ==========================================
+# ==========================================
+# JOB 1: TEST EXECUTION (OPTIMIZED)
+# ==========================================
   test:
     name: E2E Tests
     runs-on: ubuntu-latest
@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@v4
 
       # =========================
-      # NODE + CACHE FIX
+      # NODE + DEPENDENCY CACHE
       # =========================
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -46,7 +46,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # =========================
-      # 🔥 CACHE PLAYWRIGHT BROWSERS (SPEED FIX)
+      # 🔥 PLAYWRIGHT BROWSER CACHE (FIXED + FAST)
       # =========================
       - name: Cache Playwright Browsers
         uses: actions/cache@v4
@@ -72,7 +72,7 @@ jobs:
         run: mkdir -p storage
 
       # =========================
-      # TEST EXECUTION (STABLE SHARDING)
+      # TEST EXECUTION
       # =========================
       - name: Run Playwright tests
         run: pnpm exec playwright test --shard=${{ matrix.shard }}/2 --workers=2
@@ -99,9 +99,9 @@ jobs:
           retention-days: 7
 
 
-  # ==========================================
-  # JOB 2: ALLURE REPORT
-  # ==========================================
+# ==========================================
+# JOB 2: BUILD ALLURE REPORT (WITH HISTORY)
+# ==========================================
   allure-report:
     name: Allure Report (Merged)
     runs-on: ubuntu-latest
@@ -123,6 +123,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # =========================
+      # DOWNLOAD TEST RESULTS
+      # =========================
       - name: Download Allure results
         uses: actions/download-artifact@v4
         with:
@@ -130,12 +133,42 @@ jobs:
           path: allure-results-merged
           merge-multiple: true
 
-      - name: Create history directory
-        run: mkdir -p allure-results-merged/history
+      # =========================
+      # 🔥 FIX: REAL HISTORY SUPPORT (KEY CHANGE)
+      # =========================
 
+      - name: Checkout gh-pages history
+        if: github.ref == 'refs/heads/main'
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages-history
+        continue-on-error: true
+
+      - name: Inject previous history
+        run: |
+          mkdir -p allure-results-merged/history
+          if [ -d "gh-pages-history/history" ]; then
+            cp -r gh-pages-history/history/* allure-results-merged/history/ || true
+          fi
+
+      # =========================
+      # GENERATE REPORT
+      # =========================
       - name: Generate Allure Report
         run: pnpm exec allure generate allure-results-merged --clean -o allure-report
 
+      # =========================
+      # SAVE UPDATED HISTORY
+      # =========================
+      - name: Extract updated history
+        run: |
+          mkdir -p history-out
+          cp -r allure-report/history/* history-out/ || true
+
+      # =========================
+      # ARTIFACT
+      # =========================
       - name: Upload Allure Report
         uses: actions/upload-artifact@v4
         with:
@@ -144,9 +177,9 @@ jobs:
           retention-days: 7
 
 
-  # ==========================================
-  # JOB 3: DEPLOY
-  # ==========================================
+# ==========================================
+# JOB 3: DEPLOY TO GITHUB PAGES
+# ==========================================
   publish-report:
     name: Publish Allure Report
     runs-on: ubuntu-latest
