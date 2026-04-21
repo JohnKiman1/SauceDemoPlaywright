@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [ main, develop ]
   schedule:
-    - cron: "0 * * * *"   # every hour
+    - cron: "0 * * * *"
 
 permissions:
   contents: write
@@ -16,45 +16,12 @@ permissions:
 jobs:
 
 # ==========================================
-# JOB 0: PLAYWRIGHT SETUP (SHARED CACHE)
-# ==========================================
-  setup:
-    name: Setup Playwright Browsers
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install PNPM
-        run: npm install -g pnpm@9
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --prefer-offline
-
-      - name: Cache Playwright Browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: pw-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
-
-      - name: Install Playwright Browsers
-        run: pnpm exec playwright install --with-deps chromium firefox webkit
-
-
-# ==========================================
-# JOB 1: TEST FARM (FIXED SHARD EXECUTION)
+# TEST FARM (SELF-CONTAINED NODES)
 # ==========================================
   test:
     name: Test Farm (${{ matrix.shard }})
     runs-on: ubuntu-latest
-    timeout-minutes: 40
-    needs: setup
+    timeout-minutes: 45
 
     strategy:
       fail-fast: false
@@ -64,6 +31,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # =========================
+      # NODE + PNPM
+      # =========================
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -76,11 +46,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
 
-      - name: Restore Playwright Cache
+      # =========================
+      # PLAYWRIGHT CACHE (FIXED)
+      # =========================
+      - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: pw-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+
+      # =========================
+      # INSTALL PLAYWRIGHT (NO HANGS VERSION)
+      # =========================
+      - name: Install Playwright browsers (safe mode)
+        run: pnpm exec playwright install
 
       # =========================
       # ENV
@@ -94,10 +73,12 @@ jobs:
           EOF
 
       # =========================
-      # 🔥 FIXED TEST EXECUTION (NO STRING BUILDING)
+      # TEST EXECUTION
       # =========================
-      - name: Run tests (stable shard mode)
-        run: pnpm exec playwright test --shard=${{ matrix.shard }}/2 --workers=1
+      - name: Run tests
+        run: pnpm exec playwright test \
+          --shard=${{ matrix.shard }}/2 \
+          --workers=1
         env:
           CI: true
 
@@ -109,12 +90,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: allure-results-${{ matrix.shard }}
-          path: allure-results/
+          path: allure-results
           retention-days: 5
 
 
 # ==========================================
-# JOB 2: ALLURE REPORT (SAFE MERGE)
+# ALLURE REPORT
 # ==========================================
   allure-report:
     name: Allure Aggregation
@@ -124,8 +105,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install PNPM + deps
-        run: npm install -g pnpm@9 && pnpm install --frozen-lockfile --prefer-offline
+      - name: Install deps
+        run: |
+          npm install -g pnpm@9
+          pnpm install --frozen-lockfile
 
       - name: Download results
         uses: actions/download-artifact@v4
@@ -134,23 +117,13 @@ jobs:
           path: allure-results
           merge-multiple: true
 
-      - name: Validate results exist
-        run: |
-          if [ ! -d "allure-results" ] || [ -z "$(ls -A allure-results)" ]; then
-            echo "❌ No Allure results found"
-            exit 1
-          fi
+      - name: Validate results
+        run: test -d allure-results && ls allure-results
 
-      - name: Restore history
-        run: |
-          git clone --depth=1 --branch=gh-pages https://github.com/${{ github.repository }} gh-pages || true
-          mkdir -p allure-results/history
-          cp -r gh-pages/history/* allure-results/history/ || true
-
-      - name: Generate Allure Report
+      - name: Generate report
         run: pnpm exec allure generate allure-results --clean -o allure-report
 
-      - name: Upload Report
+      - name: Upload report
         uses: actions/upload-artifact@v4
         with:
           name: allure-report
@@ -158,7 +131,7 @@ jobs:
 
 
 # ==========================================
-# JOB 3: DEPLOY (GITHUB PAGES)
+# DEPLOY
 # ==========================================
   deploy:
     name: Deploy Report
@@ -168,7 +141,6 @@ jobs:
 
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Download report
