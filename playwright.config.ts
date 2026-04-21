@@ -8,14 +8,18 @@ const isCI = !!process.env.CI;
 
 export default defineConfig({
   testDir: './tests',
-  testMatch: /.*\.spec\.ts/,
+
+  // 🔥 FIX: more robust CI-safe matcher
+  testMatch: '**/*.spec.ts',
 
   globalSetup: './global-setup',
 
   fullyParallel: false,
   forbidOnly: isCI,
   retries: isCI ? 1 : 0,
-  workers: isCI ? 1 : undefined,
+
+  // 🔥 FIX: let Playwright control workers with shards
+  workers: isCI ? undefined : undefined,
 
   timeout: 30_000,
 
@@ -41,7 +45,6 @@ export default defineConfig({
   use: {
     baseURL: process.env.BASE_URL || 'https://www.saucedemo.com',
 
-    // 🔥 FIX: SINGLE SHARED AUTH STATE (CRITICAL FIX)
     storageState: 'storage/auth.json',
 
     trace: 'retain-on-failure',
