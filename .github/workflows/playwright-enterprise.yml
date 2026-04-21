@@ -6,10 +6,6 @@ on:
   pull_request:
     branches: [ main, develop ]
 
-# ✅ FIX: Node 24 migration
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
 
   # ==========================================
@@ -33,43 +29,39 @@ jobs:
         uses: actions/checkout@v4
 
       # =========================
-      # NODE SETUP (FIXED)
+      # NODE SETUP
       # =========================
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22   # ✅ FIX (avoid deprecated behavior)
+          node-version: 22
           cache: npm
 
       # =========================
-      # PNPM INSTALL
+      # PNPM
       # =========================
       - name: Install PNPM
         run: npm install -g pnpm@9
 
-      - name: Verify PNPM
-        run: pnpm -v
-
-      # =========================
-      # INSTALL DEPENDENCIES
-      # =========================
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       # =========================
-      # PLAYWRIGHT BROWSERS (CRITICAL)
+      # PLAYWRIGHT BROWSERS
       # =========================
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps
 
       # =========================
-      # ENV SETUP (NEW FIX)
+      # ENV SETUP (FIXED)
       # =========================
       - name: Create .env file
         run: |
-          echo "BASE_URL=https://www.saucedemo.com" >> .env
-          echo "USERNAME=standard_user" >> .env
-          echo "PASSWORD=secret_sauce" >> .env
+          cat <<EOF > .env
+          BASE_URL=https://www.saucedemo.com
+          USERNAME=standard_user
+          PASSWORD=secret_sauce
+          EOF
 
       # =========================
       # STORAGE SETUP
@@ -78,7 +70,7 @@ jobs:
         run: mkdir -p storage
 
       # =========================
-      # RUN TESTS (SHARDED)
+      # RUN TESTS
       # =========================
       - name: Run Playwright tests
         run: pnpm exec playwright test --shard=${{ matrix.shard }}/2
@@ -86,7 +78,7 @@ jobs:
           CI: true
 
       # =========================
-      # DEBUG: ALWAYS UPLOAD REPORTS
+      # PLAYWRIGHT REPORT
       # =========================
       - name: Upload Playwright Report
         if: always()
@@ -97,7 +89,7 @@ jobs:
           retention-days: 7
 
       # =========================
-      # ALLURE RESULTS (SAFE UPLOAD)
+      # ALLURE RESULTS
       # =========================
       - name: Ensure Allure folder exists
         if: always()
@@ -122,38 +114,24 @@ jobs:
     if: always()
 
     steps:
-      # =========================
-      # CHECKOUT
-      # =========================
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # =========================
-      # NODE SETUP (FIXED)
-      # =========================
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
-      # =========================
-      # INSTALL PNPM
-      # =========================
       - name: Install PNPM
         run: npm install -g pnpm@9
 
-      - name: Verify PNPM
-        run: pnpm -v
-
-      # =========================
-      # INSTALL DEPENDENCIES
-      # =========================
+      # ⚡ FIX: only install report tooling (faster CI)
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       # =========================
-      # DOWNLOAD SHARDS
+      # DOWNLOAD ARTIFACTS
       # =========================
       - name: Download Shard 1
         uses: actions/download-artifact@v4
@@ -168,7 +146,7 @@ jobs:
           path: allure-results-merged
 
       # =========================
-      # ENSURE RESULTS EXIST
+      # ENSURE DIRECTORY
       # =========================
       - name: Ensure merged results exist
         run: mkdir -p allure-results-merged
