@@ -9,11 +9,6 @@ import { InventoryPage } from '../pages/InventoryPage';
 import { CartPage } from '../pages/CartPage';
 import { CheckoutPage } from '../pages/CheckoutPage';
 
-/**
- * =========================
- * PAGE OBJECTS CONTRACT
- * =========================
- */
 type Pages = {
   loginPage: LoginPage;
   inventoryPage: InventoryPage;
@@ -21,11 +16,6 @@ type Pages = {
   checkoutPage: CheckoutPage;
 };
 
-/**
- * =========================
- * FIXTURE CONTRACT
- * =========================
- */
 type TestFixtures = {
   page: Page;
   context: BrowserContext;
@@ -34,34 +24,37 @@ type TestFixtures = {
 
 /**
  * =========================
- * BASE FIXTURE (CLEAN ENTERPRISE VERSION)
+ * FIX: SAFE STORAGE STATE PATH
  * =========================
  */
+const storageStatePath = path.resolve(
+  process.cwd(),
+  'storage',
+  'auth.json'
+);
+
 export const test = base.extend<TestFixtures>({
 
-  /**
-   * =========================
-   * CONTEXT LAYER (AUTH ONLY)
-   * =========================
-   */
   context: async ({ browser }, use) => {
 
-    const context = await browser.newContext({
-      storageState: process.env.STORAGE_STATE || 'storage/auth.json',
-    });
+    // =========================
+    // CI SAFETY CHECK (CRITICAL)
+    // =========================
+    if (process.env.CI && !fs.existsSync(storageStatePath)) {
+      throw new Error(
+        `❌ Missing auth state at ${storageStatePath}. Ensure auth job completed successfully.`
+      );
+    }
 
-    // ❌ REMOVED: tracing.start() -> causes crash when auto-enabled
+    const context = await browser.newContext({
+      storageState: storageStatePath,
+    });
 
     await use(context);
 
     await context.close();
   },
 
-  /**
-   * =========================
-   * PAGE LAYER
-   * =========================
-   */
   page: async ({ context }, use) => {
 
     const page = await context.newPage();
@@ -71,9 +64,6 @@ export const test = base.extend<TestFixtures>({
 
     await page.goto(config.baseURL);
 
-    // =========================
-    // NETWORK LOGGING
-    // =========================
     const logs: string[] = [];
 
     page.on('request', req => {
@@ -89,11 +79,6 @@ export const test = base.extend<TestFixtures>({
     await use(page);
   },
 
-  /**
-   * =========================
-   * PAGE OBJECT FACTORY
-   * =========================
-   */
   pages: async ({ page }, use) => {
 
     const pages: Pages = {
@@ -107,27 +92,16 @@ export const test = base.extend<TestFixtures>({
   },
 });
 
-/**
- * =========================
- * AFTER EACH HOOK (OBSERVABILITY)
- * =========================
- */
 test.afterEach(async ({ page }, testInfo) => {
 
   const isFailure = testInfo.status !== testInfo.expectedStatus;
 
-  // =========================
-  // SCREENSHOT ON FAILURE
-  // =========================
   if (isFailure) {
     await testInfo.attach('failure-screenshot', {
       body: await page.screenshot({ fullPage: true }),
       contentType: 'image/png',
     });
 
-    // =========================
-    // VIDEO ATTACHMENT
-    // =========================
     const video = page.video();
     if (video) {
       try {
@@ -135,16 +109,10 @@ test.afterEach(async ({ page }, testInfo) => {
           path: await video.path(),
           contentType: 'video/webm',
         });
-      } catch {
-        // ignore video race conditions
-      }
+      } catch {}
     }
 
-    // =========================
-    // NETWORK LOGS
-    // =========================
     const logs = (page as any)._networkLogs;
-
     if (logs?.length) {
       await testInfo.attach('network-log', {
         body: logs.join('\n'),
@@ -153,14 +121,11 @@ test.afterEach(async ({ page }, testInfo) => {
     }
   }
 
-  // =========================
-  // TRACE ATTACHMENT (SAFE ONLY)
-  // =========================
-  const tracePath = testInfo.attachments.find(a => a.name === 'trace');
+  const traceAttachment = testInfo.attachments.find(a => a.name === 'trace');
 
-  if (tracePath?.path && fs.existsSync(tracePath.path)) {
+  if (traceAttachment?.path && fs.existsSync(traceAttachment.path)) {
     await testInfo.attach('trace', {
-      path: tracePath.path,
+      path: traceAttachment.path,
       contentType: 'application/zip',
     });
   }
