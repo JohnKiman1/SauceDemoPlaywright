@@ -8,13 +8,11 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 jobs:
 
   # ==========================================
-  # JOB 1: TEST EXECUTION (SHARDED)
+  # JOB 1: TEST EXECUTION
   # ==========================================
   test:
     name: E2E Tests
@@ -69,10 +67,6 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
-      - name: Ensure Allure folder exists
-        if: always()
-        run: mkdir -p allure-results
-
       - name: Upload Allure Results
         if: always()
         uses: actions/upload-artifact@v4
@@ -83,13 +77,12 @@ jobs:
 
 
   # ==========================================
-  # JOB 2: BUILD ALLURE REPORT
+  # JOB 2: BUILD REPORT
   # ==========================================
   allure-report:
     name: Allure Report (Merged)
     runs-on: ubuntu-latest
     needs: test
-    if: always()
 
     steps:
       - name: Checkout repository
@@ -107,7 +100,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Download Allure Shards
+      - name: Download Allure results
         uses: actions/download-artifact@v4
         with:
           pattern: allure-results-shard-*
@@ -126,7 +119,7 @@ jobs:
 
 
   # ==========================================
-  # JOB 3: DEPLOY TO GITHUB PAGES
+  # JOB 3: DEPLOY TO GH-PAGES
   # ==========================================
   publish-report:
     name: Publish Allure Report
@@ -147,3 +140,4 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: report
           publish_branch: gh-pages
+          force_orphan: true
