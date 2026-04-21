@@ -79,7 +79,7 @@ jobs:
 
 
   # ==========================================
-  # JOB 2: BUILD ALLURE REPORT (WITH HISTORY)
+  # JOB 2: BUILD ALLURE REPORT (STABLE)
   # ==========================================
   allure-report:
     name: Allure Report (Merged)
@@ -110,12 +110,13 @@ jobs:
           merge-multiple: true
 
       # ==========================================
-      # 🔥 SAFE HISTORY HANDLING (FIXED)
+      # SAFE HISTORY HANDLING (FIXED FINAL VERSION)
       # ==========================================
 
       - name: Create history directory
         run: mkdir -p allure-results-merged/history
 
+      # ONLY attempt history restore on main
       - name: Download Allure history (main only)
         if: github.ref == 'refs/heads/main'
         uses: actions/download-artifact@v4
@@ -127,7 +128,7 @@ jobs:
       - name: Generate Allure Report
         run: pnpm exec allure generate allure-results-merged --clean -o allure-report
 
-      # Save history ONLY for main branch
+      # Save history ONLY for main branch (safe guard)
       - name: Save Allure history
         if: github.ref == 'refs/heads/main'
         run: |
