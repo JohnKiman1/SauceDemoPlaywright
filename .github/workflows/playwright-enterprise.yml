@@ -79,13 +79,12 @@ jobs:
 
 
   # ==========================================
-  # JOB 2: BUILD ALLURE REPORT
+  # JOB 2: BUILD ALLURE REPORT (WITH HISTORY)
   # ==========================================
   allure-report:
     name: Allure Report (Merged)
     runs-on: ubuntu-latest
     needs: test
-    if: always()
 
     steps:
       - name: Checkout repository
@@ -110,8 +109,23 @@ jobs:
           path: allure-results-merged
           merge-multiple: true
 
+      # ==========================================
+      # 🔥 HISTORY SUPPORT (KEY ADDITION)
+      # ==========================================
+      - name: Download Allure history
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-history
+          path: allure-results-merged/history
+        continue-on-error: true
+
       - name: Generate Allure Report
         run: pnpm exec allure generate allure-results-merged --clean -o allure-report
+
+      # Save history for next run
+      - name: Save Allure history
+        run: |
+          cp -r allure-report/history allure-history || true
 
       - name: Upload Allure Report
         uses: actions/upload-artifact@v4
@@ -119,6 +133,13 @@ jobs:
           name: allure-report
           path: allure-report/
           retention-days: 7
+
+      - name: Upload Allure History
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-history
+          path: allure-history/
+          retention-days: 30
 
 
   # ==========================================
@@ -131,9 +152,6 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
       - name: Download Allure Report
         uses: actions/download-artifact@v4
         with:
