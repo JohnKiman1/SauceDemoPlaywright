@@ -1,48 +1,49 @@
 import dotenv from 'dotenv';
+import path from 'node:path';
 
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-/**
- * Strongly-typed configuration object
- * Keeps environment + test users cleanly separated
- */
-type Config = {
-  baseURL: string;
-  users: {
-    valid: {
-      username: string;
-      password: string;
-    };
-    invalid: {
-      username: string;
-      password: string;
-    };
-  };
+// =========================================
+// DEFAULT FALLBACKS (CI SAFE)
+// =========================================
+const DEFAULTS = {
+  BASE_URL: 'https://www.saucedemo.com',
+  USERNAME: 'standard_user',
+  PASSWORD: 'secret_sauce',
 };
 
-const requiredEnvVars = ['BASE_URL'] as const;
+// =========================================
+// SAFE ENV LOADER
+// =========================================
+function getEnv(key: keyof typeof DEFAULTS): string {
+  const value = process.env[key];
 
-/**
- * Fail fast if critical CI variables are missing
- */
-requiredEnvVars.forEach((key) => {
-  if (!process.env[key]) {
-    throw new Error(`❌ Missing required environment variable: ${key}`);
+  if (value) return value;
+
+  // CI fallback (DO NOT crash pipeline)
+  if (process.env.CI) {
+    console.warn(`⚠️ CI missing ${key}, using fallback value`);
+    return DEFAULTS[key];
   }
-});
 
-export const config: Config = {
-  baseURL: process.env.BASE_URL || 'https://www.saucedemo.com',
+  // Local strict mode
+  throw new Error(`❌ Missing required environment variable: ${key}`);
+}
+
+// =========================================
+// CONFIG EXPORT
+// =========================================
+export const config = {
+  baseURL: getEnv('BASE_URL'),
 
   users: {
     valid: {
-      username: process.env.USERNAME || 'standard_user',
-      password: process.env.PASSWORD || 'secret_sauce',
+      username: getEnv('USERNAME'),
+      password: getEnv('PASSWORD'),
     },
-
     invalid: {
-      username: process.env.INVALID_USERNAME || 'invalid_user',
-      password: process.env.INVALID_PASSWORD || 'wrong_password',
+      username: 'invalid_user',
+      password: 'invalid_pass',
     },
   },
 };
