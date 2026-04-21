@@ -1,71 +1,49 @@
-import { Locator, Page } from '@playwright/test';
+import { expect, Locator, Page } from '@playwright/test';
 import { BasePage } from './base.page';
 
 export class CartPage extends BasePage {
 
   readonly cartItems: Locator;
-  readonly removeButtons: Locator;
-  readonly checkoutButton: Locator;
-  readonly continueShoppingButton: Locator;
-  readonly cartContainer: Locator;
+  readonly cartBadge: Locator;
 
   constructor(page: Page) {
     super(page);
 
     this.cartItems = page.locator('.cart_item');
-    this.removeButtons = page.locator('[data-test^="remove"]');
-    this.checkoutButton = page.locator('[data-test="checkout"]');
-    this.continueShoppingButton = page.locator('[data-test="continue-shopping"]');
-    this.cartContainer = page.locator('.cart_contents_container');
+    this.cartBadge = page.locator('.shopping_cart_badge');
   }
 
   // =========================
-  // PAGE STATE
+  // NEW: ITEM VISIBILITY CHECK
   // =========================
-  async isLoaded() {
-    await this.expectVisible(this.cartContainer);
-    return true;
-  }
+  async expectItemVisible(itemName: string) {
+    await this.step(`Expect item visible: ${itemName}`, async () => {
+      const item = this.cartItems.filter({ hasText: itemName });
 
-  async getItemCount(): Promise<number> {
-    return await this.cartItems.count();
-  }
-
-  // =========================
-  // DATA EXTRACTION
-  // =========================
-  async getItemNames(): Promise<string[]> {
-    return await this.cartItems
-      .locator('.inventory_item_name')
-      .allTextContents();
-  }
-
-  // =========================
-  // BUSINESS ACTIONS
-  // =========================
-  async removeItem(itemName: string) {
-    const item = this.cartItems.filter({ hasText: itemName });
-    const removeButton = item.locator('[data-test^="remove"]');
-
-    await this.click(removeButton);
-  }
-
-  async checkout() {
-    await this.click(this.checkoutButton);
-  }
-
-  async continueShopping() {
-    await this.click(this.continueShoppingButton);
-  }
-
-  // =========================
-  // ENTERPRISE ASSERTIONS
-  // =========================
-  async expectCartEmpty() {
-    await this.expectCount(this.cartItems, 0);
+      await expect(item).toBeVisible();
+    });
   }
 
   async expectCartHasItems(count: number) {
-    await this.expectCount(this.cartItems, count);
+    await expect(this.cartItems).toHaveCount(count);
+  }
+
+  async expectCartEmpty() {
+    await expect(this.cartItems).toHaveCount(0);
+  }
+
+  async removeItem(itemName: string) {
+    await this.step(`Remove item: ${itemName}`, async () => {
+      const item = this.cartItems.filter({ hasText: itemName });
+      await item.locator('button').click();
+    });
+  }
+
+  async continueShopping() {
+    await this.page.click('[data-test="continue-shopping"]');
+  }
+
+  async checkout() {
+    await this.page.click('[data-test="checkout"]');
   }
 }

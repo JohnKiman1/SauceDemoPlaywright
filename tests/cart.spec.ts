@@ -7,7 +7,6 @@ test.describe('Cart Tests', () => {
   // VIEW CART WITH ITEMS
   // =========================
   test('TC013 - View cart with items', async ({ pages }) => {
-
     const { inventoryPage, cartPage } = pages;
 
     await inventoryPage.addItemToCart(testData.products.backpack);
@@ -15,20 +14,13 @@ test.describe('Cart Tests', () => {
 
     await cartPage.expectCartHasItems(1);
 
-    const itemNames = await cartPage.getItemNames();
-
-    await cartPage.step('Validate product exists in cart', async () => {
-      if (!itemNames.includes(testData.products.backpack)) {
-        throw new Error('Product not found in cart');
-      }
-    });
+    await cartPage.expectItemVisible(testData.products.backpack);
   });
 
   // =========================
   // REMOVE ITEM
   // =========================
   test('TC014 - Remove item from cart', async ({ pages }) => {
-
     const { inventoryPage, cartPage } = pages;
 
     await inventoryPage.addItemToCart(testData.products.backpack);
@@ -43,7 +35,6 @@ test.describe('Cart Tests', () => {
   // CONTINUE SHOPPING
   // =========================
   test('TC015 - Continue shopping from cart', async ({ pages }) => {
-
     const { inventoryPage, cartPage } = pages;
 
     await inventoryPage.addItemToCart(testData.products.backpack);
@@ -51,14 +42,13 @@ test.describe('Cart Tests', () => {
 
     await cartPage.continueShopping();
 
-    await inventoryPage.isLoaded();
+    await inventoryPage.expectVisible(inventoryPage.inventoryContainer);
   });
 
   // =========================
   // CHECKOUT FLOW
   // =========================
   test('TC016 - Proceed to checkout from cart', async ({ pages }) => {
-
     const { inventoryPage, cartPage } = pages;
 
     await inventoryPage.addItemToCart(testData.products.backpack);

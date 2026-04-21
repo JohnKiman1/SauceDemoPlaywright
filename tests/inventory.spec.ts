@@ -7,14 +7,13 @@ test.describe('Inventory Tests', () => {
   // VERIFY INVENTORY LOADS
   // =========================
   test('TC006 - Verify inventory page loads correctly', async ({ pages }) => {
-
     const { inventoryPage } = pages;
 
-    await inventoryPage.isLoaded();
+    await inventoryPage.ensureLoaded();
 
-    const itemCount = await inventoryPage.getItemCount();
+    const itemCount = await inventoryPage.inventoryItems.count();
 
-    await inventoryPage.step('Validate inventory has items', async () => {
+    await test.step('Validate inventory has items', async () => {
       if (itemCount <= 0) {
         throw new Error('Inventory items not loaded correctly');
       }
@@ -25,14 +24,16 @@ test.describe('Inventory Tests', () => {
   // ADD SINGLE ITEM
   // =========================
   test('TC007 - Add single item to cart', async ({ pages }) => {
-
     const { inventoryPage } = pages;
 
     await inventoryPage.addItemToCart(testData.products.backpack);
 
-    const cartCount = await inventoryPage.getCartBadgeCount();
+    const badge = inventoryPage.cartLink.locator('.shopping_cart_badge');
 
-    await inventoryPage.step('Validate cart count is 1', async () => {
+    const countText = await badge.textContent();
+    const cartCount = countText ? parseInt(countText, 10) : 0;
+
+    await test.step('Validate cart count is 1', async () => {
       if (cartCount !== 1) {
         throw new Error(`Expected cart count 1, got ${cartCount}`);
       }
@@ -43,15 +44,17 @@ test.describe('Inventory Tests', () => {
   // ADD MULTIPLE ITEMS
   // =========================
   test('TC008 - Add multiple items to cart', async ({ pages }) => {
-
     const { inventoryPage } = pages;
 
     await inventoryPage.addItemToCart(testData.products.backpack);
     await inventoryPage.addItemToCart(testData.products.bikeLight);
 
-    const cartCount = await inventoryPage.getCartBadgeCount();
+    const badge = inventoryPage.cartLink.locator('.shopping_cart_badge');
 
-    await inventoryPage.step('Validate cart count is 2', async () => {
+    const countText = await badge.textContent();
+    const cartCount = countText ? parseInt(countText, 10) : 0;
+
+    await test.step('Validate cart count is 2', async () => {
       if (cartCount !== 2) {
         throw new Error(`Expected cart count 2, got ${cartCount}`);
       }
@@ -62,18 +65,19 @@ test.describe('Inventory Tests', () => {
   // SORT A → Z
   // =========================
   test('TC009 - Sort products by name A to Z', async ({ pages }) => {
-
     const { inventoryPage } = pages;
 
     await inventoryPage.sortBy('az');
 
-    const itemNames = await inventoryPage.getItemNames();
+    const names = await inventoryPage.inventoryItems
+      .locator('.inventory_item_name')
+      .allTextContents();
 
-    const sortedNames = [...itemNames].sort();
+    const sorted = [...names].sort();
 
-    await inventoryPage.step('Validate A-Z sorting', async () => {
-      if (JSON.stringify(itemNames) !== JSON.stringify(sortedNames)) {
-        throw new Error('Products are not sorted A-Z correctly');
+    await test.step('Validate A-Z sorting', async () => {
+      if (JSON.stringify(names) !== JSON.stringify(sorted)) {
+        throw new Error('Products not sorted A-Z correctly');
       }
     });
   });
@@ -82,17 +86,19 @@ test.describe('Inventory Tests', () => {
   // SORT Z → A
   // =========================
   test('TC010 - Sort products by name Z to A', async ({ pages }) => {
-
     const { inventoryPage } = pages;
 
     await inventoryPage.sortBy('za');
 
-    const itemNames = await inventoryPage.getItemNames();
-    const sortedNames = [...itemNames].sort().reverse();
+    const names = await inventoryPage.inventoryItems
+      .locator('.inventory_item_name')
+      .allTextContents();
 
-    await inventoryPage.step('Validate Z-A sorting', async () => {
-      if (JSON.stringify(itemNames) !== JSON.stringify(sortedNames)) {
-        throw new Error('Products are not sorted Z-A correctly');
+    const sorted = [...names].sort().reverse();
+
+    await test.step('Validate Z-A sorting', async () => {
+      if (JSON.stringify(names) !== JSON.stringify(sorted)) {
+        throw new Error('Products not sorted Z-A correctly');
       }
     });
   });
@@ -101,16 +107,19 @@ test.describe('Inventory Tests', () => {
   // SORT PRICE LOW → HIGH
   // =========================
   test('TC011 - Sort products by price low to high', async ({ pages }) => {
-
     const { inventoryPage } = pages;
 
     await inventoryPage.sortBy('lohi');
 
-    const itemPrices = await inventoryPage.getItemPrices();
-    const sortedPrices = [...itemPrices].sort((a, b) => a - b);
+    const prices = await inventoryPage.inventoryItems
+      .locator('.inventory_item_price')
+      .allTextContents();
 
-    await inventoryPage.step('Validate price low to high sorting', async () => {
-      if (JSON.stringify(itemPrices) !== JSON.stringify(sortedPrices)) {
+    const parsed = prices.map(p => parseFloat(p.replace('$', '')));
+    const sorted = [...parsed].sort((a, b) => a - b);
+
+    await test.step('Validate price low to high sorting', async () => {
+      if (JSON.stringify(parsed) !== JSON.stringify(sorted)) {
         throw new Error('Prices not sorted low to high correctly');
       }
     });
@@ -120,16 +129,19 @@ test.describe('Inventory Tests', () => {
   // SORT PRICE HIGH → LOW
   // =========================
   test('TC012 - Sort products by price high to low', async ({ pages }) => {
-
     const { inventoryPage } = pages;
 
     await inventoryPage.sortBy('hilo');
 
-    const itemPrices = await inventoryPage.getItemPrices();
-    const sortedPrices = [...itemPrices].sort((a, b) => b - a);
+    const prices = await inventoryPage.inventoryItems
+      .locator('.inventory_item_price')
+      .allTextContents();
 
-    await inventoryPage.step('Validate price high to low sorting', async () => {
-      if (JSON.stringify(itemPrices) !== JSON.stringify(sortedPrices)) {
+    const parsed = prices.map(p => parseFloat(p.replace('$', '')));
+    const sorted = [...parsed].sort((a, b) => b - a);
+
+    await test.step('Validate price high to low sorting', async () => {
+      if (JSON.stringify(parsed) !== JSON.stringify(sorted)) {
         throw new Error('Prices not sorted high to low correctly');
       }
     });

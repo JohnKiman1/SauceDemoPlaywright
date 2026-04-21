@@ -2,14 +2,14 @@ name: Playwright Enterprise Tests
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, develop ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, develop ]
 
 jobs:
 
   # ==========================================
-  # JOB 1: RUN TESTS (SHARDED)
+  # JOB 1: TEST EXECUTION (SHARDED)
   # ==========================================
   test:
     name: E2E Tests
@@ -19,54 +19,99 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1/2, 2/2]
+        shard: [1, 2]
 
     steps:
+      # =========================
+      # CHECKOUT
+      # =========================
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # =========================
+      # NODE SETUP
+      # =========================
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: lts/*
-          cache: 'pnpm'
+          node-version: 22
+          cache: npm
 
+      # =========================
+      # PNPM
+      # =========================
       - name: Install PNPM
-        run: npm install -g pnpm
+        run: npm install -g pnpm@9
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # =========================
+      # PLAYWRIGHT BROWSERS
+      # =========================
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps
 
-      # ✅ CRITICAL FIX
+      # =========================
+      # ENV SETUP (FIXED)
+      # =========================
+      - name: Create .env file
+        run: |
+          cat <<EOF > .env
+          BASE_URL=https://www.saucedemo.com
+          USERNAME=standard_user
+          PASSWORD=secret_sauce
+          EOF
+
+      # =========================
+      # STORAGE SETUP
+      # =========================
       - name: Ensure storage directory
         run: mkdir -p storage
 
-      # ✅ RUN TESTS PER SHARD
+      # =========================
+      # RUN TESTS
+      # =========================
       - name: Run Playwright tests
-        run: pnpm exec playwright test --shard=${{ matrix.shard }}
+        run: pnpm exec playwright test --shard=${{ matrix.shard }}/2
         env:
           CI: true
 
-      # ✅ Upload RAW Allure Results (NOT report)
+      # =========================
+      # PLAYWRIGHT REPORT
+      # =========================
+      - name: Upload Playwright Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-shard-${{ matrix.shard }}
+          path: playwright-report/
+          retention-days: 7
+
+      # =========================
+      # ALLURE RESULTS
+      # =========================
+      - name: Ensure Allure folder exists
+        if: always()
+        run: mkdir -p allure-results
+
       - name: Upload Allure Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: allure-results-${{ matrix.shard }}
+          name: allure-results-shard-${{ matrix.shard }}
           path: allure-results/
           retention-days: 7
 
 
   # ==========================================
-  # JOB 2: MERGE + GENERATE ALLURE REPORT
+  # JOB 2: ALLURE MERGE REPORT
   # ==========================================
   allure-report:
     name: Allure Report (Merged)
     runs-on: ubuntu-latest
     needs: test
+    if: always()
 
     steps:
       - name: Checkout repository
@@ -75,39 +120,48 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version: 22
+          cache: npm
 
       - name: Install PNPM
-        run: npm install -g pnpm
+        run: npm install -g pnpm@9
 
+      # ⚡ FIX: only install report tooling (faster CI)
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       # =========================
-      # Download shard results
+      # DOWNLOAD ARTIFACTS
       # =========================
-      - name: Download Allure Results (Shard 1)
+      - name: Download Shard 1
         uses: actions/download-artifact@v4
         with:
-          name: allure-results-1/2
+          name: allure-results-shard-1
           path: allure-results-merged
 
-      - name: Download Allure Results (Shard 2)
+      - name: Download Shard 2
         uses: actions/download-artifact@v4
         with:
-          name: allure-results-2/2
+          name: allure-results-shard-2
           path: allure-results-merged
 
       # =========================
-      # Generate merged report
+      # ENSURE DIRECTORY
+      # =========================
+      - name: Ensure merged results exist
+        run: mkdir -p allure-results-merged
+
+      # =========================
+      # GENERATE REPORT
       # =========================
       - name: Generate Allure Report
         run: pnpm exec allure generate allure-results-merged --clean -o allure-report
 
       # =========================
-      # Upload final dashboard
+      # UPLOAD REPORT
       # =========================
       - name: Upload Allure Report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: allure-report
