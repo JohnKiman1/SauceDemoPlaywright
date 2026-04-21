@@ -7,10 +7,8 @@ export default async function globalSetup(_config: FullConfig) {
   const username = process.env.USERNAME || 'standard_user';
   const password = process.env.PASSWORD || 'secret_sauce';
 
-  // 🔥 FIX: shard-safe auth file
-  const shardId = process.env.GITHUB_RUN_ID || 'local';
   const storageDir = path.resolve('storage');
-  const storagePath = path.join(storageDir, `auth-${shardId}.json`);
+  const storagePath = path.join(storageDir, 'auth.json'); 
 
   fs.mkdirSync(storageDir, { recursive: true });
 
@@ -28,12 +26,7 @@ export default async function globalSetup(_config: FullConfig) {
   await page.fill('[data-test="password"]', password);
   await page.click('[data-test="login-button"]');
 
-  try {
-    await page.waitForURL('**/inventory.html', { timeout: 20000 });
-  } catch {
-    await browser.close();
-    throw new Error('❌ Login failed in globalSetup (CI)');
-  }
+  await page.waitForURL('**/inventory.html', { timeout: 20000 });
 
   await page.context().storageState({ path: storagePath });
 

@@ -6,10 +6,6 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 const isCI = !!process.env.CI;
 
-// 🔥 FIX: match globalSetup shard file
-const shardId = process.env.GITHUB_RUN_ID || 'local';
-const storageStatePath = `storage/auth-${shardId}.json`;
-
 export default defineConfig({
   testDir: './tests',
   testMatch: /.*\.spec\.ts/,
@@ -45,8 +41,8 @@ export default defineConfig({
   use: {
     baseURL: process.env.BASE_URL || 'https://www.saucedemo.com',
 
-    // 🔥 FIX: shard-safe auth state
-    storageState: storageStatePath,
+    // 🔥 FIX: SINGLE SHARED AUTH STATE (CRITICAL FIX)
+    storageState: 'storage/auth.json',
 
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
