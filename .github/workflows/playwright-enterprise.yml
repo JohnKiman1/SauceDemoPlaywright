@@ -15,7 +15,7 @@ permissions:
 
 
 # ==========================================
-# JOB 1: SETUP (CACHE + BROWSERS ONCE)
+# JOB 1: SETUP (BROWSERS + CACHE)
 # ==========================================
 jobs:
   setup:
@@ -45,12 +45,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: pw-${{ runner.os }}-v2-${{ hashFiles('**/pnpm-lock.yaml') }}
+          key: pw-${{ runner.os }}-v3-${{ hashFiles('**/pnpm-lock.yaml') }}
 
       # =========================
       # INSTALL ONLY IF NEEDED
       # =========================
-      - name: Install Playwright Browsers (safe)
+      - name: Install Playwright Browsers
         if: steps.pw-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps
 
@@ -59,7 +59,7 @@ jobs:
 
 
 # ==========================================
-# JOB 2: TEST FARM (SHARDED EXECUTION)
+# JOB 2: TEST FARM (SHARD EXECUTION)
 # ==========================================
   test:
     name: Test Farm Shard ${{ matrix.shard }}
@@ -88,31 +88,32 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
 
       # =========================
-      # RESTORE BROWSERS CACHE
+      # RESTORE BROWSER CACHE
       # =========================
       - name: Restore Playwright Cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: pw-${{ runner.os }}-v2-${{ hashFiles('**/pnpm-lock.yaml') }}
+          key: pw-${{ runner.os }}-v3-${{ hashFiles('**/pnpm-lock.yaml') }}
 
       # =========================
-      # SHARD-SAFE STORAGE FIX (CRITICAL)
+      # 🔥 CRITICAL FIX: SHARD-ISOLATED AUTH
       # =========================
-      - name: Prepare storage isolation
+      - name: Prepare shard storage
         run: mkdir -p storage
 
-      - name: Create env (shard-aware)
+      - name: Create env (shard aware)
         run: |
           cat <<EOF > .env
           BASE_URL=https://www.saucedemo.com
           USERNAME=standard_user
           PASSWORD=secret_sauce
           PLAYWRIGHT_SHARD=${{ matrix.shard }}
+          AUTH_FILE=storage/auth-${{ matrix.shard }}.json
           EOF
 
       # =========================
-      # TEST EXECUTION (FIXED SHARD)
+      # TEST EXECUTION (SHARD SAFE)
       # =========================
       - name: Run tests
         run: pnpm exec playwright test --shard=${{ matrix.shard }}/2 --workers=1
@@ -133,7 +134,7 @@ jobs:
 
 
 # ==========================================
-# JOB 3: PR PREVIEW + ALLURE AGGREGATION
+# JOB 3: PR PREVIEW REPORT
 # ==========================================
   allure-report:
     name: PR Preview Report
@@ -163,12 +164,12 @@ jobs:
           merge-multiple: true
 
       # =========================
-      # GUARANTEE RESULTS EXIST
+      # VALIDATION (PREVENT EMPTY REPORT)
       # =========================
       - name: Validate results
         run: |
           if [ ! -d "allure-results" ] || [ -z "$(ls -A allure-results)" ]; then
-            echo "❌ No results found"
+            echo "❌ No Allure results found"
             exit 1
           fi
 
@@ -179,9 +180,9 @@ jobs:
         run: pnpm exec allure generate allure-results --clean -o allure-report
 
       # =========================
-      # UPLOAD PR PREVIEW ARTIFACT
+      # PR PREVIEW ARTIFACT
       # =========================
-      - name: Upload PR Report
+      - name: Upload PR Preview Report
         uses: actions/upload-artifact@v4
         with:
           name: pr-preview-report
