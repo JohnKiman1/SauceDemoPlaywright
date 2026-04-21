@@ -8,6 +8,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 jobs:
 
@@ -77,12 +79,13 @@ jobs:
 
 
   # ==========================================
-  # JOB 2: BUILD REPORT
+  # JOB 2: BUILD ALLURE REPORT
   # ==========================================
   allure-report:
     name: Allure Report (Merged)
     runs-on: ubuntu-latest
     needs: test
+    if: always()
 
     steps:
       - name: Checkout repository
@@ -119,7 +122,7 @@ jobs:
 
 
   # ==========================================
-  # JOB 3: DEPLOY TO GH-PAGES
+  # JOB 3: DEPLOY TO GITHUB PAGES
   # ==========================================
   publish-report:
     name: Publish Allure Report
@@ -128,16 +131,22 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Download Allure Report
         uses: actions/download-artifact@v4
         with:
           name: allure-report
           path: report
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: report
-          publish_branch: gh-pages
-          force_orphan: true
+          path: report
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
