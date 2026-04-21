@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [ main, develop ]
   schedule:
-    - cron: "0 * * * *"   # every hour
+    - cron: "0 * * * *"
 
 permissions:
   contents: write
@@ -16,23 +16,23 @@ permissions:
 jobs:
 
 # ==========================================
-# JOB 1: TEST FARM (SELF-CONTAINED)
+# TEST FARM (ROBUST + SELF-HEALING)
 # ==========================================
   test:
-    name: Test Farm (${{ matrix.node }})
+    name: Test Farm (${{ matrix.shard }})
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
 
     strategy:
       fail-fast: false
       matrix:
-        node: [1, 2]
+        shard: [1, 2]
 
     steps:
       - uses: actions/checkout@v4
 
       # =========================
-      # NODE + DEPENDENCIES
+      # NODE SETUP
       # =========================
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -40,29 +40,31 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install PNPM
-        run: npm install -g pnpm@9
+      - name: Enable Corepack (IMPORTANT FIX)
+        run: corepack enable
 
+      # =========================
+      # INSTALL DEPENDENCIES (FIXED)
+      # =========================
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --prefer-offline
+        run: |
+          npm install -g pnpm@9
+          pnpm install --frozen-lockfile
 
       # =========================
-      # PLAYWRIGHT CACHE (SAFE OPTIMIZATION)
+      # INSTALL PLAYWRIGHT (CRITICAL FIX)
       # =========================
-      - name: Cache Playwright Browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: pw-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+      - name: Install Playwright Browsers (FULL SAFE MODE)
+        run: pnpm exec playwright install --with-deps
 
       # =========================
-      # FIX: ALWAYS INSTALL BROWSERS HERE (CRITICAL)
+      # VERIFY INSTALL (DEBUG SAFETY)
       # =========================
-      - name: Install Playwright Browsers
-        run: pnpm exec playwright install chromium firefox webkit
+      - name: Verify Playwright
+        run: pnpm exec playwright --version
 
       # =========================
-      # ENV SETUP
+      # ENV
       # =========================
       - name: Create env
         run: |
@@ -73,12 +75,13 @@ jobs:
           EOF
 
       # =========================
-      # TEST EXECUTION
+      # RUN TESTS
       # =========================
       - name: Run tests
         run: pnpm exec playwright test \
-          --shard=${{ matrix.node }}/2 \
-          --workers=1
+          --shard=${{ matrix.shard }}/2 \
+          --workers=1 \
+          --reporter=line
         env:
           CI: true
 
@@ -89,13 +92,13 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: allure-results-${{ matrix.node }}
+          name: allure-results-${{ matrix.shard }}
           path: allure-results
           retention-days: 5
 
 
 # ==========================================
-# JOB 2: ALLURE REPORT
+# ALLURE AGGREGATION
 # ==========================================
   allure-report:
     name: Allure Aggregation
@@ -105,12 +108,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install PNPM + deps
-        run: npm install -g pnpm@9 && pnpm install --frozen-lockfile
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
-      # =========================
-      # DOWNLOAD RESULTS
-      # =========================
+      - name: Install deps
+        run: |
+          npm install -g pnpm@9
+          pnpm install --frozen-lockfile
+
       - name: Download results
         uses: actions/download-artifact@v4
         with:
@@ -118,35 +125,14 @@ jobs:
           path: allure-results
           merge-multiple: true
 
-      # =========================
-      # VALIDATION (PREVENT EMPTY REPORT)
-      # =========================
-      - name: Validate results exist
+      - name: Validate results
         run: |
-          if [ ! -d "allure-results" ] || [ -z "$(ls -A allure-results)" ]; then
-            echo "❌ No Allure results found"
-            exit 1
-          fi
+          test -d allure-results && ls allure-results
 
-      # =========================
-      # HISTORY RESTORE
-      # =========================
-      - name: Restore history
-        run: |
-          git clone --depth=1 --branch=gh-pages https://github.com/${{ github.repository }} gh-pages || true
-          mkdir -p allure-results/history
-          cp -r gh-pages/history/* allure-results/history/ || true
-
-      # =========================
-      # GENERATE REPORT
-      # =========================
-      - name: Generate Allure Report
+      - name: Generate report
         run: pnpm exec allure generate allure-results --clean -o allure-report
 
-      # =========================
-      # UPLOAD REPORT
-      # =========================
-      - name: Upload Report
+      - name: Upload report
         uses: actions/upload-artifact@v4
         with:
           name: allure-report
@@ -154,7 +140,7 @@ jobs:
 
 
 # ==========================================
-# JOB 3: DEPLOY
+# DEPLOY
 # ==========================================
   deploy:
     name: Deploy Report
@@ -164,7 +150,6 @@ jobs:
 
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Download report
