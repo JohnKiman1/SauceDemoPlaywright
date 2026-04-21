@@ -34,44 +34,36 @@ type TestFixtures = {
 
 /**
  * =========================
- * BASE FIXTURE (SDET ENTERPRISE STANDARD)
+ * BASE FIXTURE (CLEAN ENTERPRISE VERSION)
  * =========================
  */
 export const test = base.extend<TestFixtures>({
 
   /**
    * =========================
-   * CONTEXT LAYER (AUTH + TRACE START)
+   * CONTEXT LAYER (AUTH ONLY)
    * =========================
    */
   context: async ({ browser }, use) => {
+
     const context = await browser.newContext({
       storageState: process.env.STORAGE_STATE || 'storage/auth.json',
     });
 
-    // START TRACE (critical for debugging failures)
-    await context.tracing.start({
-      screenshots: true,
-      snapshots: true,
-      sources: true,
-    });
+    // ❌ REMOVED: tracing.start() -> causes crash when auto-enabled
 
     await use(context);
-
-    // STOP TRACE
-    await context.tracing.stop({
-      path: 'test-results/trace.zip',
-    });
 
     await context.close();
   },
 
   /**
    * =========================
-   * PAGE LAYER (GLOBAL SETTINGS + NETWORK LOGGING)
+   * PAGE LAYER
    * =========================
    */
   page: async ({ context }, use) => {
+
     const page = await context.newPage();
 
     await page.setViewportSize({ width: 1280, height: 720 });
@@ -79,11 +71,9 @@ export const test = base.extend<TestFixtures>({
 
     await page.goto(config.baseURL);
 
-    /**
-     * =========================
-     * NETWORK LOG CAPTURE
-     * =========================
-     */
+    // =========================
+    // NETWORK LOGGING
+    // =========================
     const logs: string[] = [];
 
     page.on('request', req => {
@@ -101,7 +91,7 @@ export const test = base.extend<TestFixtures>({
 
   /**
    * =========================
-   * PAGE OBJECT FACTORY (UI LAYER)
+   * PAGE OBJECT FACTORY
    * =========================
    */
   pages: async ({ page }, use) => {
@@ -119,22 +109,19 @@ export const test = base.extend<TestFixtures>({
 
 /**
  * =========================
- * GLOBAL AFTER EACH (FAILURE OBSERVABILITY LAYER)
+ * AFTER EACH HOOK (OBSERVABILITY)
  * =========================
  */
 test.afterEach(async ({ page }, testInfo) => {
 
   const isFailure = testInfo.status !== testInfo.expectedStatus;
 
+  // =========================
+  // SCREENSHOT ON FAILURE
+  // =========================
   if (isFailure) {
-
-    // =========================
-    // SCREENSHOT
-    // =========================
-    const screenshot = await page.screenshot({ fullPage: true });
-
     await testInfo.attach('failure-screenshot', {
-      body: screenshot,
+      body: await page.screenshot({ fullPage: true }),
       contentType: 'image/png',
     });
 
@@ -143,13 +130,13 @@ test.afterEach(async ({ page }, testInfo) => {
     // =========================
     const video = page.video();
     if (video) {
-      const videoPath = await video.path();
-
-      if (fs.existsSync(videoPath)) {
+      try {
         await testInfo.attach('video', {
-          path: videoPath,
+          path: await video.path(),
           contentType: 'video/webm',
         });
+      } catch {
+        // ignore video race conditions
       }
     }
 
@@ -167,13 +154,13 @@ test.afterEach(async ({ page }, testInfo) => {
   }
 
   // =========================
-  // TRACE ATTACHMENT
+  // TRACE ATTACHMENT (SAFE ONLY)
   // =========================
-  const tracePath = path.join('test-results', 'trace.zip');
+  const tracePath = testInfo.attachments.find(a => a.name === 'trace');
 
-  if (fs.existsSync(tracePath)) {
+  if (tracePath?.path && fs.existsSync(tracePath.path)) {
     await testInfo.attach('trace', {
-      path: tracePath,
+      path: tracePath.path,
       contentType: 'application/zip',
     });
   }

@@ -14,26 +14,26 @@ export default defineConfig({
   testDir: './tests',
   testMatch: /.*\.spec\.ts/,
 
-  // =========================
-  // GLOBAL SETUP
-  // =========================
-  globalSetup: require.resolve('./global-setup'),
+  globalSetup: './global-setup',
 
   // =========================
-  // EXECUTION STRATEGY
+  // EXECUTION STRATEGY (STABILITY FIRST)
   // =========================
-  fullyParallel: !isCI,
+  fullyParallel: false,
+
   forbidOnly: isCI,
 
-  retries: isCI ? 2 : 0,
-  workers: isCI ? 2 : undefined,
+  retries: isCI ? 1 : 0,
+
+  workers: isCI ? 1 : undefined,
 
   // =========================
   // TIMEOUTS
   // =========================
   timeout: 30_000,
+
   expect: {
-    timeout: 5_000,
+    timeout: 10_000,
   },
 
   // =========================
@@ -46,16 +46,15 @@ export default defineConfig({
   // =========================
   reporter: [
     ['list'],
-
-    ['html', {
-      open: isCI ? 'never' : 'on-failure',
-    }],
-
-    ['allure-playwright', {
-      outputFolder: 'allure-results',
-      detail: true,
-      suiteTitle: true,
-    }],
+    ['html', { open: 'never' }],
+    [
+      'allure-playwright',
+      {
+        outputFolder: 'allure-results',
+        detail: true,
+        suiteTitle: true,
+      },
+    ],
   ],
 
   // =========================
@@ -64,59 +63,43 @@ export default defineConfig({
   use: {
     baseURL: process.env.BASE_URL || 'https://www.saucedemo.com',
 
-    trace: isCI ? 'retain-on-failure' : 'on-first-retry',
+    storageState: 'storage/auth.json',
+
+    trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
 
     testIdAttribute: 'data-test',
 
     actionTimeout: 10_000,
-    navigationTimeout: 20_000,
+    navigationTimeout: 30_000,
   },
 
   // =========================
-  // TAG STRATEGY
+  // CI FILTERING
   // =========================
   grep: isCI ? /@smoke|@regression/ : undefined,
 
   // =========================
-  // PROJECT MATRIX
+  // PROJECTS (MULTI-BROWSER)
   // =========================
   projects: [
-
     {
-      name: 'chromium-smoke',
-      grep: /@smoke/,
+      name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        storageState: 'storage/auth.json',
       },
     },
-
     {
-      name: 'chromium-regression',
-      grep: /@regression/,
-      use: {
-        ...devices['Desktop Chrome'],
-        storageState: 'storage/auth.json',
-      },
-    },
-
-    {
-      name: 'firefox-regression',
-      grep: /@regression/,
+      name: 'firefox',
       use: {
         ...devices['Desktop Firefox'],
-        storageState: 'storage/auth.json',
       },
     },
-
     {
-      name: 'webkit-regression',
-      grep: /@regression/,
+      name: 'webkit',
       use: {
         ...devices['Desktop Safari'],
-        storageState: 'storage/auth.json',
       },
     },
   ],
