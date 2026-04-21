@@ -8,39 +8,24 @@ const isCI = !!process.env.CI;
 
 export default defineConfig({
 
-  // =========================
-  // TEST DISCOVERY
-  // =========================
   testDir: './tests',
   testMatch: /.*\.spec\.ts/,
 
   globalSetup: './global-setup',
 
-  // =========================
-  // EXECUTION STRATEGY
-  // =========================
   fullyParallel: false,
   forbidOnly: isCI,
   retries: isCI ? 1 : 0,
   workers: isCI ? 1 : undefined,
 
-  // =========================
-  // TIMEOUTS
-  // =========================
   timeout: 30_000,
 
   expect: {
     timeout: 10_000,
   },
 
-  // =========================
-  // OUTPUT
-  // =========================
   outputDir: 'test-results',
 
-  // =========================
-  // REPORTING
-  // =========================
   reporter: [
     ['list'],
     ['html', { open: 'never' }],
@@ -54,12 +39,11 @@ export default defineConfig({
     ],
   ],
 
-  // =========================
-  // GLOBAL SETTINGS
-  // =========================
   use: {
     baseURL: process.env.BASE_URL || 'https://www.saucedemo.com',
-    storageState: 'storage/auth.json',
+
+    // 🔥 FIX: REMOVE SHARED STATE (CRITICAL FOR SHARDS)
+    storageState: undefined,
 
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
@@ -71,9 +55,6 @@ export default defineConfig({
     navigationTimeout: 30_000,
   },
 
-  // =========================
-  // PROJECTS (MULTI-BROWSER)
-  // =========================
   projects: [
     {
       name: 'chromium',

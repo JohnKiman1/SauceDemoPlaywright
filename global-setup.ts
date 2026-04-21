@@ -6,16 +6,15 @@ export default async function globalSetup(_config: FullConfig) {
   const baseURL = process.env.BASE_URL || 'https://www.saucedemo.com';
 
   const storageDir = path.resolve('storage');
-  const storagePath = path.join(storageDir, 'auth.json');
-
   fs.mkdirSync(storageDir, { recursive: true });
-
-  const browser = await chromium.launch();
-  const page = await browser.newPage();
 
   console.log('[globalSetup] Logging in...');
 
-  await page.goto(baseURL, { waitUntil: 'networkidle' });
+  const browser = await chromium.launch();
+  const context = await browser.newContext();
+  const page = await context.newPage();
+
+  await page.goto(baseURL, { waitUntil: 'domcontentloaded' });
 
   await page.fill('[data-test="username"]', process.env.USERNAME || 'standard_user');
   await page.fill('[data-test="password"]', process.env.PASSWORD || 'secret_sauce');
@@ -27,9 +26,10 @@ export default async function globalSetup(_config: FullConfig) {
     throw new Error('❌ Login failed: inventory page not reached');
   }
 
-  await page.context().storageState({ path: storagePath });
+  // 🔥 FIX: DO NOT USE GLOBAL SHARED STORAGE STATE
+  // Instead we only validate login works
 
-  console.log('[globalSetup] Auth saved:', storagePath);
+  console.log('[globalSetup] Login verified (no shared state saved)');
 
   await browser.close();
 }
