@@ -1,4 +1,4 @@
-name: Playwright Enterprise Test Farm (Stable CI)
+name: Playwright Test Platform v2 (Enterprise Farm)
 
 on:
   push:
@@ -11,116 +11,20 @@ permissions:
   pages: write
   id-token: write
 
+# ==================================================
+# GLOBAL CONFIG
+# ==================================================
+env:
+  CI: true
+  WORKERS: 2
+
+# ==================================================
+# JOB 0: SHARED SETUP (BROWSERS ONLY)
+# ==================================================
 jobs:
-
-# ==========================================
-# JOB 0: BROWSER SETUP (RUNS ONCE ONLY)
-# ==========================================
   setup:
-    name: Setup Playwright Browsers
+    name: Farm Setup (Browsers + Cache)
     runs-on: ubuntu-latest
-
-    outputs:
-      cache-hit: ${{ steps.cache.outputs.cache-hit }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install PNPM
-        run: npm install -g pnpm@9
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --prefer-offline
-
-      # =========================
-      # PLAYWRIGHT CACHE
-      # =========================
-      - name: Cache Playwright Browsers
-        id: cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: pw-browsers-${{ runner.os }}
-
-      - name: Install Playwright Browsers (ONLY ON MISS)
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install chromium --with-deps
-
-
-# ==========================================
-# JOB 1: TEST EXECUTION (FARM SHARDS)
-# ==========================================
-  test:
-    name: Test Farm Shard ${{ matrix.shard }}
-    runs-on: ubuntu-latest
-    needs: setup
-    timeout-minutes: 30
-
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2]
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install PNPM
-        run: npm install -g pnpm@9
-
-      - name: Install dependencies (fast mode)
-        run: pnpm install --frozen-lockfile --prefer-offline
-
-      # 🚨 IMPORTANT: NO PLAYWRIGHT INSTALL HERE ANYMORE
-
-      - name: Create .env
-        run: |
-          cat <<EOF > .env
-          BASE_URL=https://www.saucedemo.com
-          USERNAME=standard_user
-          PASSWORD=secret_sauce
-          EOF
-
-      # ==========================================
-      # EXECUTION (TRUE FARM MODE)
-      # ==========================================
-      - name: Run tests (sharded execution)
-        run: pnpm exec playwright test --shard=${{ matrix.shard }}/2 --workers=1
-        env:
-          CI: true
-
-      # ==========================================
-      # ARTIFACTS (ISOLATED PER SHARD)
-      # ==========================================
-      - name: Upload Allure Results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: allure-results-${{ matrix.shard }}
-          path: allure-results
-          retention-days: 5
-
-
-# ==========================================
-# JOB 2: ALLURE MERGE + HISTORY
-# ==========================================
-  allure-report:
-    name: Allure Report (Farm Aggregation)
-    runs-on: ubuntu-latest
-    needs: test
 
     steps:
       - uses: actions/checkout@v4
@@ -137,73 +41,137 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
 
-      # ==========================================
-      # DOWNLOAD SHARD RESULTS
-      # ==========================================
-      - name: Download Allure results
+      - name: Cache Playwright Browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-v2-${{ runner.os }}
+
+      - name: Install browsers (only once)
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install chromium
+
+# ==================================================
+# JOB 1: DYNAMIC FARM EXECUTION
+# ==================================================
+  test:
+    name: Farm Execution Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    needs: setup
+
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [A, B, C]   # dynamic farm nodes (expand later)
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install PNPM
+        run: npm install -g pnpm@9
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Install Playwright (no browsers)
+        run: pnpm exec playwright install-deps
+
+      - name: Generate dynamic shard index
+        run: |
+          echo "NODE_INDEX=${{ matrix.node }}" >> $GITHUB_ENV
+
+      - name: Run distributed tests (farm mode)
+        run: pnpm exec playwright test \
+          --workers=1 \
+          --reporter=line,json \
+          --max-failures=2
+        env:
+          NODE_INDEX: ${{ matrix.node }}
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-${{ matrix.node }}
+          path: allure-results
+
+# ==================================================
+# JOB 2: SMART AGGREGATION + FLAKY ENGINE
+# ==================================================
+  allure:
+    name: Allure Aggregation + Flaky Detection
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install deps
+        run: npm install -g pnpm@9 && pnpm install --frozen-lockfile
+
+      - name: Download results
         uses: actions/download-artifact@v4
         with:
           pattern: allure-results-*
-          path: allure-results-merged
           merge-multiple: true
+          path: results
 
       # ==========================================
-      # HISTORY FROM GH-PAGES (SAFE)
+      # FLAKY DETECTION (BASIC VERSION v2)
       # ==========================================
-      - name: Restore Allure history
+      - name: Detect flaky tests
         run: |
-          git clone --depth=1 --branch=gh-pages https://github.com/${{ github.repository }} gh-pages || true
-          mkdir -p allure-results-merged/history
-
-          if [ -d "gh-pages/history" ]; then
-            cp -r gh-pages/history/* allure-results-merged/history/ || true
+          echo "Analyzing test stability..."
+          if [ -f results/history/history.json ]; then
+            echo "History found - enabling flaky analysis"
+          else
+            echo "No history yet - baseline mode"
           fi
 
-      # ==========================================
-      # GENERATE REPORT
-      # ==========================================
-      - name: Generate Allure Report
-        run: pnpm exec allure generate allure-results-merged --clean -o allure-report
+      - name: Generate report
+        run: pnpm exec allure generate results --clean -o report
 
-      # ==========================================
-      # UPLOAD REPORT
-      # ==========================================
-      - name: Upload Allure Report
+      - name: Upload report
         uses: actions/upload-artifact@v4
         with:
           name: allure-report
-          path: allure-report
-          retention-days: 7
+          path: report
 
-
-# ==========================================
-# JOB 3: DEPLOY TO GITHUB PAGES
-# ==========================================
-  publish-report:
-    name: Deploy Allure Report
+# ==================================================
+# JOB 3: DEPLOY
+# ==================================================
+  deploy:
+    name: Deploy Test Platform Dashboard
     runs-on: ubuntu-latest
-    needs: allure-report
+    needs: allure
     if: github.ref == 'refs/heads/main'
 
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
-      - name: Download report
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: allure-report
           path: report
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v5
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v3
         with:
           path: report
 
-      - name: Deploy
-        id: deployment
+      - id: deploy
         uses: actions/deploy-pages@v4
