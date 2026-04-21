@@ -16,7 +16,6 @@ permissions:
 env:
   CI: true
 
-
 jobs:
 
 # ==========================================
@@ -47,9 +46,12 @@ jobs:
           echo "USERNAME=standard_user" >> $GITHUB_ENV
           echo "PASSWORD=secret_sauce" >> $GITHUB_ENV
 
-      # ⚡ OPTIMISED: install only required browser for auth job
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install chromium --with-deps
+      # ✅ FIX: CLEAN + FULL BROWSER INSTALL (CRITICAL FIX)
+      - name: Clean Playwright cache
+        run: rm -rf ~/.cache/ms-playwright || true
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps
 
       - name: Generate auth state
         run: pnpm exec playwright test --project=chromium --grep "@smoke" --workers=1
@@ -99,9 +101,12 @@ jobs:
           echo "USERNAME=standard_user" >> $GITHUB_ENV
           echo "PASSWORD=secret_sauce" >> $GITHUB_ENV
 
-      # ⚡ OPTIMISED: install only chromium for speed (firefox/webkit still supported via caching locally)
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install chromium --with-deps
+      # ✅ FIX: CLEAN + FULL BROWSER INSTALL (NO MORE FIREFOX ERRORS)
+      - name: Clean Playwright cache
+        run: rm -rf ~/.cache/ms-playwright || true
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps
 
       - name: Download auth state
         uses: actions/download-artifact@v4
@@ -180,7 +185,6 @@ jobs:
     needs: allure-report
     if: github.ref == 'refs/heads/main'
 
-    # ✅ FIX: REQUIRED by GitHub Pages (THIS WAS CAUSING 400 ERROR)
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
