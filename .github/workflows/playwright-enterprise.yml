@@ -14,7 +14,7 @@ permissions:
 jobs:
 
 # ==========================================
-# JOB 1: TEST EXECUTION
+# JOB 1: TEST EXECUTION (STABLE SHARDING)
 # ==========================================
   test:
     name: E2E Tests (Shard ${{ matrix.shard }})
@@ -30,6 +30,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # =========================
+      # NODE + FAST INSTALL
+      # =========================
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -39,18 +42,26 @@ jobs:
       - name: Install PNPM
         run: npm install -g pnpm@9
 
-      - name: Install dependencies (fast)
+      - name: Install dependencies (fast mode)
         run: pnpm install --frozen-lockfile --prefer-offline
 
-      - name: Cache Playwright
+      # =========================
+      # PLAYWRIGHT CACHE (FIXED)
+      # =========================
+      - name: Cache Playwright Browsers
+        id: pw-cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: pw-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
 
-      - name: Install Playwright Browsers (cached)
-        run: pnpm exec playwright install
+      - name: Install Playwright Browsers (only if cache miss)
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps
 
+      # =========================
+      # ENV SETUP
+      # =========================
       - name: Create env
         run: |
           cat <<EOF > .env
@@ -59,21 +70,28 @@ jobs:
           PASSWORD=secret_sauce
           EOF
 
-      - name: Run tests (sharded)
-        run: pnpm exec playwright test --shard=${{ matrix.shard }}/2 --workers=2
+      # =========================
+      # TEST EXECUTION (SHARD SAFE)
+      # =========================
+      - name: Run tests
+        run: pnpm exec playwright test --shard=${{ matrix.shard }}/2 --workers=1
         env:
           CI: true
 
+      # =========================
+      # ARTIFACTS
+      # =========================
       - name: Upload Allure Results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: allure-results-${{ matrix.shard }}
-          path: allure-results
+          path: allure-results/
           retention-days: 5
 
 
 # ==========================================
-# JOB 2: ALLURE REPORT
+# JOB 2: ALLURE REPORT (SAFE MERGE)
 # ==========================================
   allure-report:
     name: Allure Report
@@ -88,9 +106,12 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install dependencies
-        run: npm install -g pnpm@9 && pnpm install --frozen-lockfile
+      - name: Install PNPM + deps
+        run: npm install -g pnpm@9 && pnpm install --frozen-lockfile --prefer-offline
 
+      # =========================
+      # DOWNLOAD RESULTS
+      # =========================
       - name: Download Allure results
         uses: actions/download-artifact@v4
         with:
@@ -98,22 +119,31 @@ jobs:
           path: allure-results
           merge-multiple: true
 
-      # 🔥 FIX: prevent empty report deploy
+      # =========================
+      # SAFETY CHECK (FIX FOR YOUR "NO RESULTS")
+      # =========================
       - name: Validate results exist
         run: |
-          if [ ! "$(ls -A allure-results)" ]; then
-            echo "No Allure results found - failing build"
+          if [ ! -d "allure-results" ] || [ -z "$(ls -A allure-results)" ]; then
+            echo "❌ No Allure results found"
             exit 1
           fi
 
+      # =========================
+      # GENERATE REPORT
+      # =========================
       - name: Generate Allure Report
         run: pnpm exec allure generate allure-results --clean -o allure-report
 
+      # =========================
+      # UPLOAD REPORT
+      # =========================
       - name: Upload Report
         uses: actions/upload-artifact@v4
         with:
           name: allure-report
           path: allure-report
+          retention-days: 5
 
 
 # ==========================================
@@ -127,6 +157,7 @@ jobs:
 
     environment:
       name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Download report
