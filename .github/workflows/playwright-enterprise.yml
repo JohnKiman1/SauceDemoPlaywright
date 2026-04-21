@@ -13,27 +13,22 @@ permissions:
   pages: write
   id-token: write
 
-# =========================
-# GLOBAL ENV SAFETY
-# =========================
 env:
   CI: true
 
-jobs:
 
 # ==========================================
-# JOB 0: SETUP (BROWSERS + CACHE + VALIDATION)
+# JOB 0: AUTH STATE GENERATION (CRITICAL FIX)
 # ==========================================
-  setup:
-    name: Setup Playwright Environment
+jobs:
+
+  auth:
+    name: Generate Auth State
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      # =========================
-      # NODE
-      # =========================
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -47,26 +42,26 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
 
       # =========================
-      # CACHE BROWSERS
+      # INSTALL ONLY CHROMIUM FOR LOGIN (FAST + STABLE)
       # =========================
-      - name: Cache Playwright Browsers
-        id: pw-cache
-        uses: actions/cache@v4
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install chromium --with-deps
+
+      # =========================
+      # RUN SMOKE LOGIN TO GENERATE STORAGE STATE
+      # =========================
+      - name: Generate auth state
+        run: pnpm exec playwright test --project=chromium --grep "@smoke" --workers=1
+
+      # =========================
+      # UPLOAD AUTH STATE
+      # =========================
+      - name: Upload auth state
+        uses: actions/upload-artifact@v4
         with:
-          path: ~/.cache/ms-playwright
-          key: pw-${{ runner.os }}-v3-${{ hashFiles('**/pnpm-lock.yaml') }}
-
-      # =========================
-      # INSTALL BROWSERS (SAFE + FULL)
-      # =========================
-      - name: Install Playwright Browsers
-        run: pnpm exec playwright install --with-deps chromium firefox webkit
-
-      # =========================
-      # VERIFY INSTALL
-      # =========================
-      - name: Verify Playwright install
-        run: pnpm exec playwright --version
+          name: auth-state
+          path: storage/auth.json
+          retention-days: 1
 
 
 # ==========================================
@@ -76,7 +71,7 @@ jobs:
     name: Test Farm Shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    needs: setup
+    needs: auth
 
     strategy:
       fail-fast: false
@@ -102,28 +97,22 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
 
       # =========================
-      # RESTORE BROWSERS CACHE
+      # INSTALL BROWSERS (ALL FOR TESTING)
       # =========================
-      - name: Restore Playwright Cache
-        uses: actions/cache@v4
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
+
+      # =========================
+      # DOWNLOAD AUTH STATE (CRITICAL FIX)
+      # =========================
+      - name: Download auth state
+        uses: actions/download-artifact@v4
         with:
-          path: ~/.cache/ms-playwright
-          key: pw-${{ runner.os }}-v3-${{ hashFiles('**/pnpm-lock.yaml') }}
+          name: auth-state
+          path: storage
 
       # =========================
-      # ENV FILE (SAFE)
-      # =========================
-      - name: Create env
-        run: |
-          mkdir -p storage
-          cat <<EOF > .env
-          BASE_URL=https://www.saucedemo.com
-          USERNAME=standard_user
-          PASSWORD=secret_sauce
-          EOF
-
-      # =========================
-      # DEBUG (IMPORTANT FOR CI ISSUES)
+      # DEBUG SAFETY
       # =========================
       - name: Debug environment
         run: |
@@ -132,7 +121,7 @@ jobs:
           ls -la storage || true
 
       # =========================
-      # RUN TESTS (SHARDED SAFE)
+      # RUN SHARDED TESTS
       # =========================
       - name: Run tests
         run: pnpm exec playwright test --shard=${{ matrix.shard }}/2 --workers=1
@@ -140,7 +129,7 @@ jobs:
           CI: true
 
       # =========================
-      # ARTIFACTS
+      # ALLURE RESULTS
       # =========================
       - name: Upload Allure Results
         if: always()
@@ -152,7 +141,7 @@ jobs:
 
 
 # ==========================================
-# JOB 2: ALLURE REPORT (SAFE MERGE)
+# JOB 2: ALLURE REPORT
 # ==========================================
   allure-report:
     name: Allure Aggregation
@@ -178,9 +167,6 @@ jobs:
           path: allure-results
           merge-multiple: true
 
-      # =========================
-      # VALIDATION
-      # =========================
       - name: Validate results exist
         run: |
           if [ ! -d "allure-results" ] || [ -z "$(ls -A allure-results)" ]; then
@@ -188,24 +174,15 @@ jobs:
             exit 1
           fi
 
-      # =========================
-      # HISTORY (OPTIONAL SAFE)
-      # =========================
       - name: Restore history
         run: |
           git clone --depth=1 --branch=gh-pages https://github.com/${{ github.repository }} gh-pages || true
           mkdir -p allure-results/history
           cp -r gh-pages/history/* allure-results/history/ || true
 
-      # =========================
-      # GENERATE REPORT
-      # =========================
       - name: Generate Allure Report
         run: pnpm exec allure generate allure-results --clean -o allure-report
 
-      # =========================
-      # UPLOAD REPORT
-      # =========================
       - name: Upload Report
         uses: actions/upload-artifact@v4
         with:
