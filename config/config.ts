@@ -1,49 +1,27 @@
 import dotenv from 'dotenv';
 import path from 'node:path';
 
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
-// =========================================
-// DEFAULT FALLBACKS (CI SAFE)
-// =========================================
-const DEFAULTS = {
-  BASE_URL: 'https://www.saucedemo.com',
-  USERNAME: 'standard_user',
-  PASSWORD: 'secret_sauce',
-};
+const requiredEnvVars = ['BASE_URL', 'USERNAME', 'PASSWORD'] as const;
 
-// =========================================
-// SAFE ENV LOADER
-// =========================================
-function getEnv(key: keyof typeof DEFAULTS): string {
-  const value = process.env[key];
-
-  if (value) return value;
-
-  // CI fallback (DO NOT crash pipeline)
-  if (process.env.CI) {
+requiredEnvVars.forEach((key) => {
+  if (!process.env[key]) {
     console.warn(`⚠️ CI missing ${key}, using fallback value`);
-    return DEFAULTS[key];
   }
+});
 
-  // Local strict mode
-  throw new Error(`❌ Missing required environment variable: ${key}`);
-}
-
-// =========================================
-// CONFIG EXPORT
-// =========================================
 export const config = {
-  baseURL: getEnv('BASE_URL'),
+  baseURL: process.env.BASE_URL || 'https://www.saucedemo.com',
 
   users: {
     valid: {
-      username: getEnv('USERNAME'),
-      password: getEnv('PASSWORD'),
+      username: process.env.USERNAME || 'standard_user',
+      password: process.env.PASSWORD || 'secret_sauce',
     },
     invalid: {
       username: 'invalid_user',
-      password: 'invalid_pass',
+      password: 'invalid_password',
     },
   },
 };
