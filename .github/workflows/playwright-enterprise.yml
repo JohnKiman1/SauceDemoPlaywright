@@ -48,9 +48,9 @@ jobs:
           echo "USERNAME=standard_user" >> $GITHUB_ENV
           echo "PASSWORD=secret_sauce" >> $GITHUB_ENV
 
-      # FIX: install browsers once (no redundant deps install)
+      # ✅ FIXED: Install ALL browsers (required for auth job too)
       - name: Install Playwright Browsers
-        run: pnpm exec playwright install chromium --with-deps
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
 
       - name: Generate auth state
         run: pnpm exec playwright test --project=chromium --grep "@smoke" --workers=1
@@ -101,9 +101,9 @@ jobs:
           echo "USERNAME=standard_user" >> $GITHUB_ENV
           echo "PASSWORD=secret_sauce" >> $GITHUB_ENV
 
-      # FIX: install browsers (cached in CI)
+      # ✅ FIXED: Install ALL browsers (CRITICAL FIX)
       - name: Install Playwright Browsers
-        run: pnpm exec playwright install chromium --with-deps
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
 
       - name: Download auth state
         uses: actions/download-artifact@v4
@@ -111,7 +111,6 @@ jobs:
           name: auth-state
           path: storage
 
-      # 🔥 CRITICAL FIX: ensure allure folder always exists
       - name: Ensure allure directory exists
         run: mkdir -p allure-results
 
@@ -120,7 +119,6 @@ jobs:
         env:
           CI: true
 
-      # FIX: always upload results even if tests fail
       - name: Upload Allure Results
         if: always()
         uses: actions/upload-artifact@v4
@@ -158,11 +156,10 @@ jobs:
           path: allure-results
           merge-multiple: true
 
-      # FIX: prevent hard failure when empty
       - name: Validate results (safe mode)
         run: |
           if [ ! -d "allure-results" ] || [ -z "$(ls -A allure-results 2>/dev/null)" ]; then
-            echo "⚠️ No Allure results found — skipping report generation"
+            echo "⚠️ No Allure results found — continuing safely"
             mkdir -p allure-results
           fi
 
