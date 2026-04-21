@@ -13,27 +13,18 @@ permissions:
   pages: write
   id-token: write
 
+
+# ==========================================
+# JOB 1: BUILD + CACHE BROWSERS (ONCE ONLY)
+# ==========================================
 jobs:
-
-# ==========================================
-# TEST FARM (SELF-CONTAINED NODES)
-# ==========================================
-  test:
-    name: Test Farm (${{ matrix.shard }})
+  setup:
+    name: Setup Playwright Environment
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2]
 
     steps:
       - uses: actions/checkout@v4
 
-      # =========================
-      # NODE + PNPM
-      # =========================
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -47,19 +38,68 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
 
       # =========================
-      # PLAYWRIGHT CACHE (FIXED)
+      # CACHE FIX (IMPORTANT)
       # =========================
-      - name: Cache Playwright browsers
+      - name: Cache Playwright Browsers
+        id: pw-cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: pw-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+          key: pw-${{ runner.os }}-v1-${{ hashFiles('**/pnpm-lock.yaml') }}
 
       # =========================
-      # INSTALL PLAYWRIGHT (NO HANGS VERSION)
+      # ALWAYS ENSURE BROWSERS EXIST
       # =========================
-      - name: Install Playwright browsers (safe mode)
-        run: pnpm exec playwright install
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install --with-deps
+
+      - name: Verify browsers
+        run: pnpm exec playwright install --dry-run
+
+
+# ==========================================
+# JOB 2: TEST FARM
+# ==========================================
+  test:
+    name: Test Farm (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: setup
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install PNPM
+        run: npm install -g pnpm@9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      # =========================
+      # RESTORE BROWSER CACHE
+      # =========================
+      - name: Restore Playwright Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-v1-${{ hashFiles('**/pnpm-lock.yaml') }}
+
+      # =========================
+      # SAFETY FALLBACK (CRITICAL FIX)
+      # =========================
+      - name: Ensure browsers exist (fallback fix)
+        run: pnpm exec playwright install --with-deps
 
       # =========================
       # ENV
@@ -73,12 +113,10 @@ jobs:
           EOF
 
       # =========================
-      # TEST EXECUTION
+      # FIX: SHARD COMMAND (IMPORTANT)
       # =========================
       - name: Run tests
-        run: pnpm exec playwright test \
-          --shard=${{ matrix.shard }}/2 \
-          --workers=1
+        run: pnpm exec playwright test --shard=${{ matrix.shard }}/2 --workers=1
         env:
           CI: true
 
@@ -95,8 +133,8 @@ jobs:
 
 
 # ==========================================
-# ALLURE REPORT
-# ==========================================
+# JOB 3: ALLURE REPORT
+# =========================================
   allure-report:
     name: Allure Aggregation
     runs-on: ubuntu-latest
@@ -105,10 +143,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install deps
-        run: |
-          npm install -g pnpm@9
-          pnpm install --frozen-lockfile
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install PNPM + deps
+        run: npm install -g pnpm@9 && pnpm install --frozen-lockfile --prefer-offline
 
       - name: Download results
         uses: actions/download-artifact@v4
@@ -117,13 +159,23 @@ jobs:
           path: allure-results
           merge-multiple: true
 
-      - name: Validate results
-        run: test -d allure-results && ls allure-results
+      - name: Validate results exist
+        run: |
+          if [ ! -d "allure-results" ] || [ -z "$(ls -A allure-results)" ]; then
+            echo "❌ No Allure results found"
+            exit 1
+          fi
 
-      - name: Generate report
+      - name: Restore history
+        run: |
+          git clone --depth=1 --branch=gh-pages https://github.com/${{ github.repository }} gh-pages || true
+          mkdir -p allure-results/history
+          cp -r gh-pages/history/* allure-results/history/ || true
+
+      - name: Generate Allure Report
         run: pnpm exec allure generate allure-results --clean -o allure-report
 
-      - name: Upload report
+      - name: Upload Report
         uses: actions/upload-artifact@v4
         with:
           name: allure-report
@@ -131,7 +183,7 @@ jobs:
 
 
 # ==========================================
-# DEPLOY
+# JOB 4: DEPLOY
 # ==========================================
   deploy:
     name: Deploy Report
@@ -141,6 +193,7 @@ jobs:
 
     environment:
       name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Download report
