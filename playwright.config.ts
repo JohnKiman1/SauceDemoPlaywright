@@ -2,45 +2,33 @@ import { defineConfig, devices } from '@playwright/test';
 import dotenv from 'dotenv';
 import path from 'node:path';
 
-dotenv.config({ path: path.resolve(__dirname, '.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 const isCI = !!process.env.CI;
 
 export default defineConfig({
-
-  // =========================
-  // TEST DISCOVERY
-  // =========================
   testDir: './tests',
-  testMatch: /.*\.spec\.ts/,
+
+  // 🔥 FIX: more robust CI-safe matcher
+  testMatch: '**/*.spec.ts',
 
   globalSetup: './global-setup',
 
-  // =========================
-  // EXECUTION STRATEGY
-  // =========================
   fullyParallel: false,
   forbidOnly: isCI,
   retries: isCI ? 1 : 0,
-  workers: isCI ? 1 : undefined,
 
-  // =========================
-  // TIMEOUTS
-  // =========================
+  // 🔥 FIX: let Playwright control workers with shards
+  workers: isCI ? undefined : undefined,
+
   timeout: 30_000,
 
   expect: {
     timeout: 10_000,
   },
 
-  // =========================
-  // OUTPUT
-  // =========================
   outputDir: 'test-results',
 
-  // =========================
-  // REPORTING
-  // =========================
   reporter: [
     ['list'],
     ['html', { open: 'never' }],
@@ -54,11 +42,9 @@ export default defineConfig({
     ],
   ],
 
-  // =========================
-  // GLOBAL SETTINGS
-  // =========================
   use: {
     baseURL: process.env.BASE_URL || 'https://www.saucedemo.com',
+
     storageState: 'storage/auth.json',
 
     trace: 'retain-on-failure',
@@ -71,9 +57,6 @@ export default defineConfig({
     navigationTimeout: 30_000,
   },
 
-  // =========================
-  // PROJECTS (MULTI-BROWSER)
-  // =========================
   projects: [
     {
       name: 'chromium',

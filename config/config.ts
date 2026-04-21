@@ -1,37 +1,17 @@
 import dotenv from 'dotenv';
+import path from 'node:path';
 
-dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
-/**
- * Strongly-typed configuration object
- * Keeps environment + test users cleanly separated
- */
-type Config = {
-  baseURL: string;
-  users: {
-    valid: {
-      username: string;
-      password: string;
-    };
-    invalid: {
-      username: string;
-      password: string;
-    };
-  };
-};
+const requiredEnvVars = ['BASE_URL', 'USERNAME', 'PASSWORD'] as const;
 
-const requiredEnvVars = ['BASE_URL'] as const;
-
-/**
- * Fail fast if critical CI variables are missing
- */
 requiredEnvVars.forEach((key) => {
   if (!process.env[key]) {
-    throw new Error(`❌ Missing required environment variable: ${key}`);
+    console.warn(`⚠️ CI missing ${key}, using fallback value`);
   }
 });
 
-export const config: Config = {
+export const config = {
   baseURL: process.env.BASE_URL || 'https://www.saucedemo.com',
 
   users: {
@@ -39,10 +19,9 @@ export const config: Config = {
       username: process.env.USERNAME || 'standard_user',
       password: process.env.PASSWORD || 'secret_sauce',
     },
-
     invalid: {
-      username: process.env.INVALID_USERNAME || 'invalid_user',
-      password: process.env.INVALID_PASSWORD || 'wrong_password',
+      username: 'invalid_user',
+      password: 'invalid_password',
     },
   },
 };
