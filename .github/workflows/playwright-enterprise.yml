@@ -50,7 +50,6 @@ jobs:
       # BROWSER STRATEGY
       # =========================
       - name: Set browser strategy
-        id: strategy
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             echo "PROJECTS=chromium" >> $GITHUB_ENV
@@ -64,7 +63,7 @@ jobs:
           fi
 
       # =========================
-      # PLAYWRIGHT INSTALL (FIXED)
+      # PLAYWRIGHT INSTALL
       # =========================
       - name: Install Playwright Browsers
         run: pnpm exec playwright install $BROWSERS
@@ -81,7 +80,7 @@ jobs:
           EOF
 
       # =========================
-      # TEST EXECUTION (FIXED 🔥)
+      # TEST EXECUTION
       # =========================
       - name: Run tests
         run: |
@@ -130,7 +129,15 @@ jobs:
           path: allure-results
           merge-multiple: true
 
-      # 🔥 history for flaky detection
+      # ✅ Prevent empty report issue
+      - name: Validate results exist
+        run: |
+          if [ ! -d "allure-results" ] || [ -z "$(ls -A allure-results)" ]; then
+            echo "❌ No Allure results found"
+            exit 1
+          fi
+
+      # 🔥 History for trends
       - name: Restore history
         run: |
           git clone --depth=1 --branch=gh-pages https://github.com/${{ github.repository }} gh-pages || true
@@ -148,7 +155,7 @@ jobs:
 
 
 # ==========================================
-# JOB 3: DEPLOY
+# JOB 3: DEPLOY (FIXED LINK)
 # ==========================================
   deploy:
     name: Deploy Report
@@ -158,6 +165,7 @@ jobs:
 
     environment:
       name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Download report
