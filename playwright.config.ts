@@ -17,14 +17,11 @@ export default defineConfig({
   globalSetup: './global-setup',
 
   // =========================
-  // EXECUTION STRATEGY (STABILITY FIRST)
+  // EXECUTION STRATEGY
   // =========================
   fullyParallel: false,
-
   forbidOnly: isCI,
-
   retries: isCI ? 1 : 0,
-
   workers: isCI ? 1 : undefined,
 
   // =========================
@@ -58,11 +55,10 @@ export default defineConfig({
   ],
 
   // =========================
-  // GLOBAL TEST SETTINGS
+  // GLOBAL SETTINGS
   // =========================
   use: {
     baseURL: process.env.BASE_URL || 'https://www.saucedemo.com',
-
     storageState: 'storage/auth.json',
 
     trace: 'retain-on-failure',
@@ -76,31 +72,20 @@ export default defineConfig({
   },
 
   // =========================
-  // CI FILTERING
-  // =========================
-  grep: isCI ? /@smoke|@regression/ : undefined,
-
-  // =========================
   // PROJECTS (MULTI-BROWSER)
   // =========================
   projects: [
     {
       name: 'chromium',
-      use: {
-        ...devices['Desktop Chrome'],
-      },
+      use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'firefox',
-      use: {
-        ...devices['Desktop Firefox'],
-      },
+      use: { ...devices['Desktop Firefox'] },
     },
     {
       name: 'webkit',
-      use: {
-        ...devices['Desktop Safari'],
-      },
+      use: { ...devices['Desktop Safari'] },
     },
   ],
 });
