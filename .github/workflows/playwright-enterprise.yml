@@ -13,28 +13,17 @@ permissions:
   pages: write
   id-token: write
 
-
+# ==========================================
+# JOB 1: SETUP (BROWSERS + CACHE - ONCE)
+# ==========================================
 jobs:
-
-# ==========================================
-# JOB 1: TEST FARM (FIXED ARCHITECTURE)
-# ==========================================
-  test:
-    name: Test Farm Shard ${{ matrix.shard }}
+  setup:
+    name: Setup Environment
     runs-on: ubuntu-latest
-    timeout-minutes: 40
-
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2]
 
     steps:
       - uses: actions/checkout@v4
 
-      # =========================
-      # NODE
-      # =========================
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -48,57 +37,33 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
 
       # =========================
-      # PLAYWRIGHT CACHE (CRITICAL FIX)
+      # CACHE PLAYWRIGHT BROWSERS
       # =========================
-      - name: Cache Playwright browsers
+      - name: Cache Playwright Browsers
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: pw-${{ runner.os }}-v2-${{ hashFiles('**/pnpm-lock.yaml') }}
+          key: pw-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
 
       # =========================
-      # SINGLE SAFE INSTALL (NO DOUBLE INSTALLS)
+      # INSTALL BROWSERS (ONLY ON MISS)
       # =========================
-      - name: Install Playwright browsers (safe)
+      - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps
 
-      # =========================
-      # ENV
-      # =========================
-      - name: Create env
-        run: |
-          cat <<EOF > .env
-          BASE_URL=https://www.saucedemo.com
-          USERNAME=standard_user
-          PASSWORD=secret_sauce
-          EOF
-
-      # =========================
-      # TEST EXECUTION
-      # =========================
-      - name: Run tests
-        run: pnpm exec playwright test --shard=${{ matrix.shard }}/2 --workers=1
-        env:
-          CI: true
-
-      # =========================
-      # ARTIFACTS (IMPORTANT FOR PR PREVIEW)
-      # =========================
-      - name: Upload Allure Results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: allure-results-${{ matrix.shard }}
-          path: allure-results
-
-
 # ==========================================
-# JOB 2: ALLURE REPORT
+# JOB 2: TEST FARM (SHARDED)
 # ==========================================
-  allure:
-    name: Allure Aggregation
+  test:
+    name: Test Farm Shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
-    needs: test
+    timeout-minutes: 45
+    needs: setup
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
 
     steps:
       - uses: actions/checkout@v4
@@ -109,32 +74,90 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install dependencies
-        run: npm install -g pnpm@9 && pnpm install --frozen-lockfile
+      - name: Install PNPM
+        run: npm install -g pnpm@9
 
-      - name: Download results
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      # =========================
+      # RESTORE BROWSER CACHE
+      # =========================
+      - name: Restore Playwright Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+
+      # =========================
+      # ENV SETUP
+      # =========================
+      - name: Create env
+        run: |
+          cat <<EOF > .env
+          BASE_URL=https://www.saucedemo.com
+          USERNAME=standard_user
+          PASSWORD=secret_sauce
+          EOF
+
+      # =========================
+      # RUN TESTS (SHARDED)
+      # =========================
+      - name: Run tests
+        run: pnpm exec playwright test --shard=${{ matrix.shard }}/2 --workers=1
+        env:
+          CI: true
+
+      # =========================
+      # UPLOAD RESULTS
+      # =========================
+      - name: Upload Allure Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-${{ matrix.shard }}
+          path: allure-results
+          retention-days: 5
+
+# ==========================================
+# JOB 3: ALLURE REPORT
+# ==========================================
+  allure:
+    name: Allure Aggregation
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PNPM + deps
+        run: npm install -g pnpm@9 && pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: allure-results-*
           path: allure-results
           merge-multiple: true
 
-      - name: Validate results exist
+      - name: Validate results
         run: |
-          test -d allure-results || (echo "No results" && exit 1)
+          if [ ! -d "allure-results" ] || [ -z "$(ls -A allure-results)" ]; then
+            echo "❌ No results found"
+            exit 1
+          fi
 
-      - name: Generate report
+      - name: Generate Allure Report
         run: pnpm exec allure generate allure-results --clean -o allure-report
 
-      - name: Upload report
+      - name: Upload Report
         uses: actions/upload-artifact@v4
         with:
           name: allure-report
           path: allure-report
 
-
 # ==========================================
-# JOB 3: PR PREVIEW REPORT (FIXED)
+# JOB 4: PR PREVIEW (FIXED - ALWAYS RUNS ON PR)
 # ==========================================
   pr-preview:
     name: PR Preview Report
@@ -143,17 +166,59 @@ jobs:
     if: github.event_name == 'pull_request'
 
     steps:
-      - uses: actions/checkout@v4
-
       - name: Download report
         uses: actions/download-artifact@v4
         with:
           name: allure-report
           path: report
 
-      - name: Deploy PR Preview (GitHub Pages)
+      - name: Deploy PR Preview
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: report
           destination_dir: pr-${{ github.event.pull_request.number }}
+
+      - name: Comment Preview Link
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = `https://${context.repo.owner}.github.io/${context.repo.repo}/pr-${context.issue.number}/`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🚀 **PR Preview Report Ready**\n\n📊 ${url}`
+            });
+
+# ==========================================
+# JOB 5: PROD DEPLOY (MAIN ONLY)
+# ==========================================
+  deploy:
+    name: Deploy Report
+    runs-on: ubuntu-latest
+    needs: allure
+    if: github.ref == 'refs/heads/main'
+
+    environment:
+      name: github-pages
+
+    steps:
+      - name: Download report
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-report
+          path: report
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: report
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
