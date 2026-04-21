@@ -46,17 +46,12 @@ jobs:
           echo "USERNAME=standard_user" >> $GITHUB_ENV
           echo "PASSWORD=secret_sauce" >> $GITHUB_ENV
 
-      # ✅ FIX: CLEAN + FULL BROWSER INSTALL (CRITICAL FIX)
-      - name: Clean Playwright cache
-        run: rm -rf ~/.cache/ms-playwright || true
-
+      # ✅ FIX: Install ALL browsers (required for stability)
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps
 
       - name: Generate auth state
         run: pnpm exec playwright test --project=chromium --grep "@smoke" --workers=1
-        env:
-          CI: true
 
       - name: Upload auth state
         uses: actions/upload-artifact@v4
@@ -67,7 +62,7 @@ jobs:
 
 
 # ==========================================
-# TEST JOB
+# TEST JOB (SHARDED)
 # ==========================================
   test:
     name: Test Farm Shard ${{ matrix.shard }}
@@ -101,10 +96,7 @@ jobs:
           echo "USERNAME=standard_user" >> $GITHUB_ENV
           echo "PASSWORD=secret_sauce" >> $GITHUB_ENV
 
-      # ✅ FIX: CLEAN + FULL BROWSER INSTALL (NO MORE FIREFOX ERRORS)
-      - name: Clean Playwright cache
-        run: rm -rf ~/.cache/ms-playwright || true
-
+      # ✅ FIX: Install ALL browsers (CRITICAL FIX)
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps
 
@@ -119,8 +111,6 @@ jobs:
 
       - name: Run tests
         run: pnpm exec playwright test --shard=${{ matrix.shard }}/2 --workers=1
-        env:
-          CI: true
 
       - name: Upload Allure Results
         if: always()
@@ -159,7 +149,7 @@ jobs:
           path: allure-results
           merge-multiple: true
 
-      - name: Validate results (safe mode)
+      - name: Validate results
         run: |
           if [ ! -d "allure-results" ] || [ -z "$(ls -A allure-results 2>/dev/null)" ]; then
             echo "⚠️ No Allure results found — continuing safely"
