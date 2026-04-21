@@ -1,99 +1,145 @@
-# 🏢 Playwright SDET Enterprise Automation Framework
+# 🏢 Playwright Enterprise Automation Platform
 
-A scalable, maintainable, and interview-ready **end-to-end test automation framework** built with Playwright and TypeScript, designed using **enterprise SDET architecture principles**.
+&#x20; &#x20;
+
+A **production-grade, enterprise SDET automation platform** built with **Playwright + TypeScript**, demonstrating **distributed execution, CI/CD maturity, and scalable architecture** used in real engineering teams.
 
 ---
 
-# 🚀 Overview
+# 🚀 What This Is
 
-This framework demonstrates a **real-world QA automation architecture** used in modern SDET teams.
+This is not just a test suite — it is a **mini test platform**:
 
-It follows a strict layered model:
+- ⚡ Distributed test execution (Test Farm)
+- 🌍 Multi-browser strategy (Chromium, Firefox, WebKit)
+- 🔁 CI/CD with GitHub Actions
+- 📊 Allure reporting + history trends
+- ⏱️ Hourly scheduled regression
+- 📦 Artifact-driven reporting
+- 📧 Notification-ready pipeline
+
+---
+
+# 🧱 Architecture (Layered SDET Model)
 
 ```
-Tests → Flows → Pages → Fixtures → Core Utilities
+Tests → Flows → Pages → Fixtures → Core
 ```
 
-This ensures:
+## 🔹 Test Layer (Intent)
 
-- High scalability
-- Low maintenance cost
-- Reduced flakiness
-- Clean separation of concerns
+- Business-readable scenarios
+- No UI logic / locators
+
+## 🔹 Flow Layer (Business Logic ⭐)
+
+- User journeys (Login, Cart, Checkout)
+- Reusable orchestration
+
+## 🔹 Page Layer (UI)
+
+- Locators + actions only
+- No business logic
+
+## 🔹 Fixture Layer (DI)
+
+- Test bootstrapping
+- Context + page injection
+
+## 🔹 Core Layer
+
+- Base abstractions
+- Logging, reporting, helpers
 
 ---
 
-# 🧱 Architecture Design
+# 🧪 Test Platform Design
 
-## 🔹 1. Test Layer (Intent Layer)
+## ⚡ Distributed Test Farm
 
-> Business-readable test scenarios
-
-- No locators
-- No UI logic
-- No setup duplication
-
-Example:
-
-```ts
-await flows.checkout.completeOrder(userData);
+```
+        ┌──────────────┐
+        │ GitHub CI    │
+        └──────┬───────┘
+               │
+     ┌─────────┴─────────┐
+     │                   │
+ ┌───▼────┐        ┌─────▼───┐
+ │ Node A │        │ Node B  │
+ │Shard 1 │        │Shard 2  │
+ └───┬────┘        └─────┬───┘
+     │                   │
+     └──────┬────────────┘
+            ▼
+     Allure Aggregation
+            ▼
+       GitHub Pages
 ```
 
----
+### Characteristics
 
-## 🔹 2. Flow Layer (Business Layer ⭐ CORE)
-
-> Represents real user journeys
-
-Examples:
-
-- LoginFlow
-- CartFlow
-- CheckoutFlow
-
-Responsibilities:
-
-- Orchestrates page interactions
-- Encapsulates business logic
-- Reusable across test suites
+- Sharded execution (`--shard=1/2`)
+- Independent failure isolation
+- Parallel CI scaling
 
 ---
 
-## 🔹 3. Page Layer (UI Layer)
+## 🌍 Multi-Browser Strategy (Enterprise Optimized)
 
-> Pure UI interaction layer
+| Trigger            | Browsers           | Purpose         |
+| ------------------ | ------------------ | --------------- |
+| Pull Request       | Chromium           | Fast feedback   |
+| Main Branch        | Chromium + Firefox | Stable coverage |
+| Scheduled (Hourly) | All browsers       | Full regression |
 
-Responsibilities:
-
-- Locators
-- Click / Fill / Select actions
-- No assertions (except page state checks)
-
----
-
-## 🔹 4. Fixture Layer (Dependency Injection)
-
-> Bootstraps test environment
-
-Provides:
-
-- Browser context
-- Page instance
-- Page objects
-
-Ensures consistency across all tests
+👉 Optimizes **speed vs coverage trade-off**
 
 ---
 
-## 🔹 5. Core Layer
+## ⏱️ Scheduled Regression
 
-> Shared utilities and base abstractions
+```yaml
+cron: "0 * * * *"
+```
 
-Includes:
+- Runs every hour
+- Detects regressions early
+- Enables trend analysis
 
-- BasePage (actions, assertions, steps)
-- Logging utilities
-- Reporting hooks
+---
+
+# 📊 Reporting (Allure)
+
+## Features
+
+- HTML dashboards
+- Historical trends
+- Failure artifacts (trace, video, screenshots)
+- Suite-level analytics
+
+## 🔗 Live Dashboard
+
+👉 [https://johnkiman1.github.io/SauceDemoPlaywright/](https://johnkiman1.github.io/SauceDemoPlaywright/)
+
+---
+
+# ⚙️ CI/CD Pipeline
+
+## Workflow Stages
+
+1. **Test Farm Execution**
+
+   - Multi-node sharding
+   - Browser-aware execution
+
+2. **Allure Aggregation**
+
+   - Merge shard results
+   - Restore history
+
+3. **Deployment**
+
+   - Publish to GitHub Pages
 
 ---
 
@@ -101,169 +147,162 @@ Includes:
 
 ```
 project-root/
-│
-├── tests/              # Test specs (business intent only)
-├── pages/              # UI layer (locators + actions)
-├── flows/              # Business workflows (SDET layer)
-├── fixtures/           # Test setup & dependency injection
-├── config/             # Environment configuration
+├── tests/              # Test specs
+├── pages/              # UI layer
+├── flows/              # Business logic
+├── fixtures/           # DI layer
+├── core/               # Base + utilities
 ├── data/               # Test data
-├── core/               # Base classes & utilities
+├── config/             # Env configs
+├── storage/            # Auth state
 ├── playwright.config.ts
-└── README.md
+└── .github/workflows/
 ```
 
 ---
 
-# ⚙️ Key Features
+# 🔐 Authentication Strategy
 
-## 🧪 Test Execution
-
-- Parallel execution enabled
-- Retry strategy for CI stability
-- Tag-based filtering (@smoke, @regression)
-
-## 📊 Reporting
-
-- HTML reports
-- Allure integration (enterprise-ready setup)
-- Attachments on failure (screenshots, HTML snapshots)
-
-## 🔐 Authentication
-
-- Storage state-based login
-- Global setup support
-- Session reuse across tests
-
-## 🧠 Stability Enhancements
-
-- BasePage abstraction
-- Built-in step logging
-- Auto screenshots on failure
-- URL validation utilities
+- Uses `storage/auth.json`
+- Generated via `globalSetup`
+- Eliminates login overhead
 
 ---
 
-# 🧩 Example Test (Clean SDET Style)
+# 🧠 Stability Engineering
+
+- Retry in CI
+- Trace on failure
+- Screenshot + video capture
+- Controlled parallelism
+- Shard isolation
+
+---
+
+# 🧪 Example Test (SDET Style)
 
 ```ts
-import { test } from '../fixtures/base.fixture';
-
-
-test('TC017 - Complete checkout flow', async ({ flows }) => {
-  await flows.cart.addItemToCart('Backpack');
-  await flows.cart.openCart();
-
-  await flows.checkout.completeOrder({
-    firstName: 'John',
-    lastName: 'Doe',
-    postalCode: '00100'
-  });
+await flows.checkout.completeOrder({
+  firstName: 'John',
+  lastName: 'Doe',
+  postalCode: '00100'
 });
 ```
 
 ---
 
-# 🔄 Design Principles
-
-## ✔ Separation of Concerns
-
-Each layer has a single responsibility
-
-## ✔ Reusability First
-
-Flows are reusable across multiple test suites
-
-## ✔ Maintainability
-
-UI changes only affect Page Layer
-
-## ✔ Scalability
-
-New features require only Flow additions, not test rewrites
-
----
-
-# 🧪 CI/CD Integration
+# 📧 Notifications (Extensible)
 
 Supports:
 
-- GitHub Actions
-- Parallel execution
-- Artifact uploads
-- Test report publishing
+- Email alerts (status + report link)
+- Slack / Teams integration
+- Future: WhatsApp (via API)
 
 ---
 
-# 📦 Installation
+# 🧪 Local Development
+
+## Install
 
 ```bash
-npm install
-npx playwright install
+pnpm install
+pnpm exec playwright install
+```
+
+## Run Tests
+
+```bash
+pnpm exec playwright test
+```
+
+## Debug Test
+
+```bash
+pnpm exec playwright test --debug
+```
+
+## View Report
+
+```bash
+pnpm exec playwright show-report
 ```
 
 ---
 
-# ▶️ Running Tests
+# 🛠️ Troubleshooting
+
+## ❌ Browser not found
 
 ```bash
-# Run all tests
-npx playwright test
-
-# Run smoke tests
-npx playwright test --grep @smoke
-
-# Run regression tests
-npx playwright test --grep @regression
+pnpm exec playwright install
 ```
 
----
+## ❌ Empty Allure report
 
-# 📊 Reporting
+- Ensure `allure-results/` exists
+- Validate artifacts merged correctly
 
-```bash
-npx playwright show-report
-```
+## ❌ Flaky tests
 
----
-
-# 🏁 Goal of This Framework
-
-This project is designed to demonstrate:
-
-- Real-world SDET architecture thinking
-- Scalable automation design
-- CI/CD readiness
-- Interview-level framework design skills
+- Check trace files
+- Review retries
+- Validate selectors
 
 ---
 
-# 🧠 Author Intent
+# 🔒 Security Considerations
 
-This framework is intentionally structured to reflect:
-
-> “How senior SDETs design automation frameworks in production teams”
-
-Not:
-
-- tutorial-level scripts
-- basic Page Object Model only
+- Use GitHub Secrets for credentials
+- Never commit `.env`
+- Use app passwords (not real passwords)
 
 ---
 
-# 🚀 Next Evolution Path
+# 🧠 Engineering Principles
 
-Planned upgrades:
+- Separation of concerns
+- Reusability-first design
+- Stability over speed
+- Scalable architecture
 
-- API + UI hybrid flows
-- Contract testing integration
+---
+
+# 🚀 Roadmap
+
+- PR preview reports
+- Auto PR comments with results
+- Flaky test detection (trend-based)
+- API + UI hybrid testing
 - Visual regression testing
-- Flaky test detection system
-- Distributed test execution (grid)
+
+---
+
+# 📈 Why This Matters
+
+This project demonstrates:
+
+- Real-world SDET thinking
+- CI/CD maturity
+- Distributed system mindset
+- Enterprise test design
+
+---
+
+# 👨‍💻 Author Philosophy
+
+> Good tests verify. Great frameworks scale. Enterprise platforms enable teams.
 
 ---
 
 # ✅ Status
 
-✔ Production-grade architecture ✔ Interview-ready ✔ Scalable to enterprise level
+✔ Enterprise-ready\
+✔ CI/CD integrated\
+✔ Distributed execution\
+✔ Interview-ready
+
+---
+
+⭐ If this helped, consider starring the repo!
 
