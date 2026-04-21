@@ -15,7 +15,7 @@ permissions:
 
 
 # ==========================================
-# JOB 1: BUILD + CACHE BROWSERS (ONCE ONLY)
+# JOB 1: SETUP + BROWSER VAULT (RUN ONCE)
 # ==========================================
 jobs:
   setup:
@@ -38,27 +38,28 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
 
       # =========================
-      # CACHE FIX (IMPORTANT)
+      # FAST BROWSER CACHE STRATEGY
       # =========================
       - name: Cache Playwright Browsers
         id: pw-cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: pw-${{ runner.os }}-v1-${{ hashFiles('**/pnpm-lock.yaml') }}
+          key: pw-${{ runner.os }}-v2-${{ hashFiles('**/pnpm-lock.yaml') }}
 
       # =========================
-      # ALWAYS ENSURE BROWSERS EXIST
+      # INSTALL ONLY IF NEEDED
       # =========================
-      - name: Install Playwright Browsers
-        run: pnpm exec playwright install --with-deps
+      - name: Install Playwright Browsers (cache-aware)
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install chromium firefox webkit
 
-      - name: Verify browsers
-        run: pnpm exec playwright install --dry-run
+      - name: Verify setup
+        run: pnpm exec playwright --version
 
 
 # ==========================================
-# JOB 2: TEST FARM
+# JOB 2: TEST FARM (PARALLEL SHARDS)
 # ==========================================
   test:
     name: Test Farm (${{ matrix.shard }})
@@ -87,22 +88,16 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
 
       # =========================
-      # RESTORE BROWSER CACHE
+      # RESTORE CACHE ONLY (NO INSTALL HERE)
       # =========================
       - name: Restore Playwright Cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: pw-${{ runner.os }}-v1-${{ hashFiles('**/pnpm-lock.yaml') }}
+          key: pw-${{ runner.os }}-v2-${{ hashFiles('**/pnpm-lock.yaml') }}
 
       # =========================
-      # SAFETY FALLBACK (CRITICAL FIX)
-      # =========================
-      - name: Ensure browsers exist (fallback fix)
-        run: pnpm exec playwright install --with-deps
-
-      # =========================
-      # ENV
+      # ENV SETUP
       # =========================
       - name: Create env
         run: |
@@ -113,7 +108,7 @@ jobs:
           EOF
 
       # =========================
-      # FIX: SHARD COMMAND (IMPORTANT)
+      # SHARDED EXECUTION
       # =========================
       - name: Run tests
         run: pnpm exec playwright test --shard=${{ matrix.shard }}/2 --workers=1
@@ -133,8 +128,8 @@ jobs:
 
 
 # ==========================================
-# JOB 3: ALLURE REPORT
-# =========================================
+# JOB 3: ALLURE AGGREGATION
+# ==========================================
   allure-report:
     name: Allure Aggregation
     runs-on: ubuntu-latest
@@ -159,6 +154,9 @@ jobs:
           path: allure-results
           merge-multiple: true
 
+      # =========================
+      # SAFE VALIDATION
+      # =========================
       - name: Validate results exist
         run: |
           if [ ! -d "allure-results" ] || [ -z "$(ls -A allure-results)" ]; then
@@ -166,6 +164,9 @@ jobs:
             exit 1
           fi
 
+      # =========================
+      # HISTORY SUPPORT
+      # =========================
       - name: Restore history
         run: |
           git clone --depth=1 --branch=gh-pages https://github.com/${{ github.repository }} gh-pages || true
@@ -183,7 +184,7 @@ jobs:
 
 
 # ==========================================
-# JOB 4: DEPLOY
+# JOB 4: DEPLOY REPORT
 # ==========================================
   deploy:
     name: Deploy Report
