@@ -15,7 +15,7 @@ permissions:
 
 
 # ==========================================
-# JOB 1: SETUP (BROWSERS + CACHE)
+# JOB 1: SETUP ENVIRONMENT (BROWSERS + CACHE)
 # ==========================================
 jobs:
   setup:
@@ -25,6 +25,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # =========================
+      # NODE
+      # =========================
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -38,43 +41,41 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
 
       # =========================
-      # CACHE BROWSERS
+      # PLAYWRIGHT CACHE
       # =========================
       - name: Cache Playwright Browsers
-        id: pw-cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: pw-${{ runner.os }}-v3-${{ hashFiles('**/pnpm-lock.yaml') }}
+          key: pw-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
 
       # =========================
-      # INSTALL ONLY IF NEEDED
+      # INSTALL BROWSERS ONCE
       # =========================
       - name: Install Playwright Browsers
-        if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps
-
-      - name: Verify browsers
-        run: pnpm exec playwright install --dry-run
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
 
 
 # ==========================================
-# JOB 2: TEST FARM (SHARD EXECUTION)
+# JOB 2: TEST FARM (SHARDED EXECUTION)
 # ==========================================
   test:
-    name: Test Farm Shard ${{ matrix.shard }}
+    name: Test Farm Shard ${{ matrix.shardIndex }}
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     needs: setup
 
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shardIndex: [1, 2]
 
     steps:
       - uses: actions/checkout@v4
 
+      # =========================
+      # NODE
+      # =========================
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -88,38 +89,34 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
 
       # =========================
-      # RESTORE BROWSER CACHE
+      # RESTORE CACHE (NO REINSTALL)
       # =========================
       - name: Restore Playwright Cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: pw-${{ runner.os }}-v3-${{ hashFiles('**/pnpm-lock.yaml') }}
+          key: pw-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
 
       # =========================
-      # 🔥 CRITICAL FIX: SHARD-ISOLATED AUTH
+      # ENV
       # =========================
-      - name: Prepare shard storage
-        run: mkdir -p storage
-
-      - name: Create env (shard aware)
+      - name: Create env
         run: |
           cat <<EOF > .env
           BASE_URL=https://www.saucedemo.com
           USERNAME=standard_user
           PASSWORD=secret_sauce
-          PLAYWRIGHT_SHARD=${{ matrix.shard }}
-          AUTH_FILE=storage/auth-${{ matrix.shard }}.json
           EOF
 
       # =========================
-      # TEST EXECUTION (SHARD SAFE)
+      # TEST EXECUTION (FIXED SHARD)
       # =========================
       - name: Run tests
-        run: pnpm exec playwright test --shard=${{ matrix.shard }}/2 --workers=1
+        run: pnpm exec playwright test \
+          --shard=${{ matrix.shardIndex }}/2 \
+          --workers=1
         env:
           CI: true
-          PLAYWRIGHT_SHARD: ${{ matrix.shard }}
 
       # =========================
       # ARTIFACTS
@@ -128,16 +125,16 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: allure-results-${{ matrix.shard }}
+          name: allure-results-${{ matrix.shardIndex }}
           path: allure-results
           retention-days: 5
 
 
 # ==========================================
-# JOB 3: PR PREVIEW REPORT
+# JOB 3: ALLURE REPORT
 # ==========================================
   allure-report:
-    name: PR Preview Report
+    name: Allure Aggregation
     runs-on: ubuntu-latest
     needs: test
 
@@ -153,9 +150,6 @@ jobs:
       - name: Install PNPM + deps
         run: npm install -g pnpm@9 && pnpm install --frozen-lockfile --prefer-offline
 
-      # =========================
-      # DOWNLOAD SHARD RESULTS
-      # =========================
       - name: Download results
         uses: actions/download-artifact@v4
         with:
@@ -164,9 +158,9 @@ jobs:
           merge-multiple: true
 
       # =========================
-      # VALIDATION (PREVENT EMPTY REPORT)
+      # VALIDATION SAFETY
       # =========================
-      - name: Validate results
+      - name: Validate results exist
         run: |
           if [ ! -d "allure-results" ] || [ -z "$(ls -A allure-results)" ]; then
             echo "❌ No Allure results found"
@@ -174,23 +168,29 @@ jobs:
           fi
 
       # =========================
+      # HISTORY (OPTIONAL BUT SAFE)
+      # =========================
+      - name: Restore history
+        run: |
+          git clone --depth=1 --branch=gh-pages https://github.com/${{ github.repository }} gh-pages || true
+          mkdir -p allure-results/history
+          cp -r gh-pages/history/* allure-results/history/ || true
+
+      # =========================
       # GENERATE REPORT
       # =========================
       - name: Generate Allure Report
         run: pnpm exec allure generate allure-results --clean -o allure-report
 
-      # =========================
-      # PR PREVIEW ARTIFACT
-      # =========================
-      - name: Upload PR Preview Report
+      - name: Upload Report
         uses: actions/upload-artifact@v4
         with:
-          name: pr-preview-report
+          name: allure-report
           path: allure-report
 
 
 # ==========================================
-# JOB 4: DEPLOY (MAIN ONLY)
+# JOB 4: DEPLOY REPORT (GITHUB PAGES)
 # ==========================================
   deploy:
     name: Deploy Report
@@ -206,7 +206,7 @@ jobs:
       - name: Download report
         uses: actions/download-artifact@v4
         with:
-          name: pr-preview-report
+          name: allure-report
           path: report
 
       - name: Setup Pages
