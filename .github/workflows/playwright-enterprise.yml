@@ -14,12 +14,12 @@ permissions:
 jobs:
 
 # ==========================================
-# JOB 1: TEST EXECUTION (STABLE SHARDING)
+# JOB 1: TEST EXECUTION (SHARD SAFE)
 # ==========================================
   test:
     name: E2E Tests (Shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 35
 
     strategy:
       fail-fast: false
@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@v4
 
       # =========================
-      # NODE + FAST INSTALL
+      # NODE (FAST + STABLE CACHE)
       # =========================
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -42,11 +42,11 @@ jobs:
       - name: Install PNPM
         run: npm install -g pnpm@9
 
-      - name: Install dependencies (fast mode)
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
 
       # =========================
-      # PLAYWRIGHT CACHE (FIXED)
+      # PLAYWRIGHT CACHE (SAFE)
       # =========================
       - name: Cache Playwright Browsers
         id: pw-cache
@@ -55,12 +55,12 @@ jobs:
           path: ~/.cache/ms-playwright
           key: pw-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
 
-      - name: Install Playwright Browsers (only if cache miss)
+      - name: Install Playwright Browsers (fast mode)
         if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps
+        run: pnpm exec playwright install
 
       # =========================
-      # ENV SETUP
+      # ENV
       # =========================
       - name: Create env
         run: |
@@ -73,25 +73,25 @@ jobs:
       # =========================
       # TEST EXECUTION (SHARD SAFE)
       # =========================
-      - name: Run tests
+      - name: Run tests (stable mode)
         run: pnpm exec playwright test --shard=${{ matrix.shard }}/2 --workers=1
         env:
           CI: true
 
       # =========================
-      # ARTIFACTS
+      # ARTIFACTS (ISOLATED)
       # =========================
       - name: Upload Allure Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: allure-results-${{ matrix.shard }}
+          name: allure-results-shard-${{ matrix.shard }}
           path: allure-results/
           retention-days: 5
 
 
 # ==========================================
-# JOB 2: ALLURE REPORT (SAFE MERGE)
+# JOB 2: ALLURE REPORT (ROBUST MERGE)
 # ==========================================
   allure-report:
     name: Allure Report
@@ -105,6 +105,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
       - name: Install PNPM + deps
         run: npm install -g pnpm@9 && pnpm install --frozen-lockfile --prefer-offline
@@ -115,12 +116,12 @@ jobs:
       - name: Download Allure results
         uses: actions/download-artifact@v4
         with:
-          pattern: allure-results-*
+          pattern: allure-results-shard-*
           path: allure-results
           merge-multiple: true
 
       # =========================
-      # SAFETY CHECK (FIX FOR YOUR "NO RESULTS")
+      # SAFETY CHECK
       # =========================
       - name: Validate results exist
         run: |
@@ -147,7 +148,7 @@ jobs:
 
 
 # ==========================================
-# JOB 3: DEPLOY
+# JOB 3: DEPLOY (GITHUB PAGES)
 # ==========================================
   publish-report:
     name: Deploy Allure Report
