@@ -3,33 +3,44 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 export default async function globalSetup(_config: FullConfig) {
-  const baseURL = process.env.BASE_URL || 'https://www.saucedemo.com';
+  const baseURL =
+    process.env.BASE_URL || 'https://www.saucedemo.com';
+
+  const username =
+    process.env.USERNAME || 'standard_user';
+
+  const password =
+    process.env.PASSWORD || 'secret_sauce';
 
   const storageDir = path.resolve('storage');
+  const storagePath = path.join(storageDir, 'auth.json');
+
   fs.mkdirSync(storageDir, { recursive: true });
+
+  const browser = await chromium.launch({
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
+
+  const page = await browser.newPage();
 
   console.log('[globalSetup] Logging in...');
 
-  const browser = await chromium.launch();
-  const context = await browser.newContext();
-  const page = await context.newPage();
-
   await page.goto(baseURL, { waitUntil: 'domcontentloaded' });
 
-  await page.fill('[data-test="username"]', process.env.USERNAME || 'standard_user');
-  await page.fill('[data-test="password"]', process.env.PASSWORD || 'secret_sauce');
+  await page.fill('[data-test="username"]', username);
+  await page.fill('[data-test="password"]', password);
   await page.click('[data-test="login-button"]');
 
-  await page.waitForURL('**/inventory.html', { timeout: 20000 });
-
-  if (!page.url().includes('inventory')) {
-    throw new Error('❌ Login failed: inventory page not reached');
+  try {
+    await page.waitForURL('**/inventory.html', { timeout: 20000 });
+  } catch {
+    await browser.close();
+    throw new Error('❌ Login failed in CI/globalSetup');
   }
 
-  // 🔥 FIX: DO NOT USE GLOBAL SHARED STORAGE STATE
-  // Instead we only validate login works
+  await page.context().storageState({ path: storagePath });
 
-  console.log('[globalSetup] Login verified (no shared state saved)');
+  console.log('[globalSetup] Auth saved:', storagePath);
 
   await browser.close();
 }
