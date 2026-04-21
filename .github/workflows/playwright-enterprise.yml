@@ -1,4 +1,4 @@
-name: Playwright Test Platform (PR Preview System v1)
+name: Playwright Test Platform (PR Preview System v2)
 
 on:
   push:
@@ -12,57 +12,17 @@ permissions:
   contents: write
   pages: write
   id-token: write
-  pull-requests: write   # 🔥 REQUIRED for PR comments
+
 
 jobs:
 
 # ==========================================
-# JOB 1: SETUP (FAST + CLEAN)
-# ==========================================
-  setup:
-    name: Setup Environment
-    runs-on: ubuntu-latest
-
-    outputs:
-      cache-key: ${{ steps.cache.outputs.key }}
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install PNPM
-        run: npm install -g pnpm@9
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --prefer-offline
-
-      - name: Cache Playwright
-        id: cache
-        run: echo "key=pw-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}" >> $GITHUB_OUTPUT
-
-      - name: Restore cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ steps.cache.outputs.key }}
-
-      - name: Install browsers (single install)
-        run: pnpm exec playwright install --with-deps
-
-
-# ==========================================
-# JOB 2: TEST FARM (FIXED ISOLATION)
+# JOB 1: TEST FARM (FIXED ARCHITECTURE)
 # ==========================================
   test:
     name: Test Farm Shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
-    needs: setup
-    timeout-minutes: 45
+    timeout-minutes: 40
 
     strategy:
       fail-fast: false
@@ -72,6 +32,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # =========================
+      # NODE
+      # =========================
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -84,38 +47,44 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
 
-      - name: Restore Playwright cache
+      # =========================
+      # PLAYWRIGHT CACHE (CRITICAL FIX)
+      # =========================
+      - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: pw-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+          key: pw-${{ runner.os }}-v2-${{ hashFiles('**/pnpm-lock.yaml') }}
 
-      # 🔥 CRITICAL FIX: NO SHARED AUTH
-      - name: Create isolated env per shard
+      # =========================
+      # SINGLE SAFE INSTALL (NO DOUBLE INSTALLS)
+      # =========================
+      - name: Install Playwright browsers (safe)
+        run: pnpm exec playwright install --with-deps
+
+      # =========================
+      # ENV
+      # =========================
+      - name: Create env
         run: |
-          mkdir -p storage
           cat <<EOF > .env
           BASE_URL=https://www.saucedemo.com
           USERNAME=standard_user
           PASSWORD=secret_sauce
-          SHARD=${{ matrix.shard }}
           EOF
 
       # =========================
-      # RUN TESTS (SHARD SAFE)
+      # TEST EXECUTION
       # =========================
       - name: Run tests
-        run: pnpm exec playwright test \
-          --shard=${{ matrix.shard }}/2 \
-          --workers=1 \
-          --retries=1
+        run: pnpm exec playwright test --shard=${{ matrix.shard }}/2 --workers=1
         env:
           CI: true
 
       # =========================
-      # ARTIFACTS PER SHARD
+      # ARTIFACTS (IMPORTANT FOR PR PREVIEW)
       # =========================
-      - name: Upload results
+      - name: Upload Allure Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -124,9 +93,9 @@ jobs:
 
 
 # ==========================================
-# JOB 3: ALLURE AGGREGATION
+# JOB 2: ALLURE REPORT
 # ==========================================
-  report:
+  allure:
     name: Allure Aggregation
     runs-on: ubuntu-latest
     needs: test
@@ -134,18 +103,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install deps
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
         run: npm install -g pnpm@9 && pnpm install --frozen-lockfile
 
       - name: Download results
         uses: actions/download-artifact@v4
         with:
           pattern: allure-results-*
-          merge-multiple: true
           path: allure-results
+          merge-multiple: true
 
-      - name: Validate
-        run: test -d allure-results && ls allure-results
+      - name: Validate results exist
+        run: |
+          test -d allure-results || (echo "No results" && exit 1)
 
       - name: Generate report
         run: pnpm exec allure generate allure-results --clean -o allure-report
@@ -158,47 +134,26 @@ jobs:
 
 
 # ==========================================
-# JOB 4: PR PREVIEW DEPLOYMENT
+# JOB 3: PR PREVIEW REPORT (FIXED)
 # ==========================================
-  deploy:
+  pr-preview:
     name: PR Preview Report
     runs-on: ubuntu-latest
-    needs: report
-    if: always()
+    needs: allure
+    if: github.event_name == 'pull_request'
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download report
         uses: actions/download-artifact@v4
         with:
           name: allure-report
           path: report
 
-      # 🔥 PR-specific folder
-      - name: Create PR folder
-        run: |
-          mkdir -p public/pr-${{ github.event.pull_request.number || github.run_number }}
-          cp -r report/* public/pr-${{ github.event.pull_request.number || github.run_number }}/
-
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+      - name: Deploy PR Preview (GitHub Pages)
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./public
-
-      # =========================
-      # PR COMMENT (PREVIEW LINK)
-      # =========================
-      - name: Comment PR with report link
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const pr = context.issue.number;
-            const url = `https://${context.repo.owner}.github.io/${context.repo.repo}/pr-${pr}/`;
-
-            github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: pr,
-              body: `🧪 **Playwright PR Preview Ready**\n\n📊 Report: ${url}`
-            });
+          publish_dir: report
+          destination_dir: pr-${{ github.event.pull_request.number }}
