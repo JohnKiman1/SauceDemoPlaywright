@@ -42,19 +42,19 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
 
       # =========================
-      # FIXED ENV (CRITICAL)
+      # ENV (FIXED - MUST EXIST BEFORE TEST LOAD)
       # =========================
-      - name: Export environment variables
+      - name: Set environment variables
         run: |
           echo "BASE_URL=https://www.saucedemo.com" >> $GITHUB_ENV
           echo "USERNAME=standard_user" >> $GITHUB_ENV
           echo "PASSWORD=secret_sauce" >> $GITHUB_ENV
 
       # =========================
-      # BROWSER (STABLE)
+      # BROWSER FIX (CRITICAL)
       # =========================
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install chromium --with-deps
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install --with-deps
 
       # =========================
       # GENERATE AUTH STATE
@@ -69,6 +69,7 @@ jobs:
         with:
           name: auth-state
           path: storage/auth.json
+          retention-days: 1
 
 
 # ==========================================
@@ -101,19 +102,19 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
 
       # =========================
-      # FIXED ENV (CRITICAL FIX)
+      # ENV FIXED
       # =========================
-      - name: Export environment variables
+      - name: Set environment variables
         run: |
           echo "BASE_URL=https://www.saucedemo.com" >> $GITHUB_ENV
           echo "USERNAME=standard_user" >> $GITHUB_ENV
           echo "PASSWORD=secret_sauce" >> $GITHUB_ENV
 
       # =========================
-      # BROWSER (STABLE)
+      # BROWSER FIX (CRITICAL)
       # =========================
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install chromium --with-deps
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install --with-deps
 
       # =========================
       # AUTH STATE
