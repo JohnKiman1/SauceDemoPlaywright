@@ -8,6 +8,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 jobs:
 
@@ -77,7 +79,7 @@ jobs:
 
 
   # ==========================================
-  # JOB 2: BUILD REPORT
+  # JOB 2: BUILD ALLURE REPORT (WITH HISTORY)
   # ==========================================
   allure-report:
     name: Allure Report (Merged)
@@ -107,8 +109,30 @@ jobs:
           path: allure-results-merged
           merge-multiple: true
 
+      # ==========================================
+      # 🔥 FIXED: SAFE HISTORY (PR vs MAIN SPLIT)
+      # ==========================================
+
+      - name: Download Allure history (main only)
+        if: github.ref == 'refs/heads/main'
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-history
+          path: allure-results-merged/history
+        continue-on-error: true
+
+      - name: Ensure history directory exists
+        run: mkdir -p allure-results-merged/history
+
       - name: Generate Allure Report
         run: pnpm exec allure generate allure-results-merged --clean -o allure-report
+
+      # Save history ONLY on main branch
+      - name: Save Allure history
+        if: github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p allure-history
+          cp -r allure-report/history/* allure-history/ || true
 
       - name: Upload Allure Report
         uses: actions/upload-artifact@v4
@@ -117,9 +141,17 @@ jobs:
           path: allure-report/
           retention-days: 7
 
+      - name: Upload Allure History
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-history
+          path: allure-history/
+          retention-days: 30
+
 
   # ==========================================
-  # JOB 3: DEPLOY TO GH-PAGES
+  # JOB 3: DEPLOY TO GITHUB PAGES
   # ==========================================
   publish-report:
     name: Publish Allure Report
@@ -134,10 +166,13 @@ jobs:
           name: allure-report
           path: report
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: report
-          publish_branch: gh-pages
-          force_orphan: true
+          path: report
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
