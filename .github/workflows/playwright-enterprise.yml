@@ -16,12 +16,51 @@ permissions:
 jobs:
 
 # ==========================================
+# JOB 0: PLAYWRIGHT SETUP (CRITICAL FIX)
+# ==========================================
+  setup:
+    name: Setup Playwright Browsers
+    runs-on: ubuntu-latest
+    outputs:
+      cache-key: ${{ steps.cache-key.outputs.key }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install PNPM
+        run: npm install -g pnpm@9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Generate cache key
+        id: cache-key
+        run: echo "key=pw-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}" >> $GITHUB_OUTPUT
+
+      - name: Cache Playwright Browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.cache-key.outputs.key }}
+
+      - name: Install ALL browsers (FIX FOR YOUR ERROR)
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
+
+
+# ==========================================
 # JOB 1: TEST FARM
 # ==========================================
   test:
     name: Test Farm (${{ matrix.node }})
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    needs: setup
 
     strategy:
       fail-fast: false
@@ -31,9 +70,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # =========================
-      # NODE SETUP
-      # =========================
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -47,26 +83,13 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
 
       # =========================
-      # BROWSER STRATEGY
+      # DO NOT reinstall browsers here (FIX)
       # =========================
-      - name: Set browser strategy
-        run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo "PROJECTS=chromium" >> $GITHUB_ENV
-            echo "BROWSERS=chromium" >> $GITHUB_ENV
-          elif [[ "${{ github.event_name }}" == "schedule" ]]; then
-            echo "PROJECTS=chromium firefox webkit" >> $GITHUB_ENV
-            echo "BROWSERS=chromium firefox webkit" >> $GITHUB_ENV
-          else
-            echo "PROJECTS=chromium firefox" >> $GITHUB_ENV
-            echo "BROWSERS=chromium firefox" >> $GITHUB_ENV
-          fi
-
-      # =========================
-      # PLAYWRIGHT INSTALL
-      # =========================
-      - name: Install Playwright Browsers
-        run: pnpm exec playwright install $BROWSERS
+      - name: Restore Playwright Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
 
       # =========================
       # ENV
@@ -80,19 +103,12 @@ jobs:
           EOF
 
       # =========================
-      # TEST EXECUTION
+      # TEST EXECUTION (SAFE SHARDING)
       # =========================
       - name: Run tests
-        run: |
-          CMD=""
-          for p in $PROJECTS; do
-            CMD="$CMD --project=$p"
-          done
-
-          pnpm exec playwright test \
-            $CMD \
-            --shard=${{ matrix.node }}/2 \
-            --workers=1
+        run: pnpm exec playwright test \
+          --shard=${{ matrix.node }}/2 \
+          --workers=1
         env:
           CI: true
 
@@ -129,7 +145,9 @@ jobs:
           path: allure-results
           merge-multiple: true
 
-      # ✅ Prevent empty report issue
+      # =========================
+      # FIX: prevent empty report failure
+      # =========================
       - name: Validate results exist
         run: |
           if [ ! -d "allure-results" ] || [ -z "$(ls -A allure-results)" ]; then
@@ -137,7 +155,9 @@ jobs:
             exit 1
           fi
 
-      # 🔥 History for trends
+      # =========================
+      # HISTORY (SAFE)
+      # =========================
       - name: Restore history
         run: |
           git clone --depth=1 --branch=gh-pages https://github.com/${{ github.repository }} gh-pages || true
@@ -155,7 +175,7 @@ jobs:
 
 
 # ==========================================
-# JOB 3: DEPLOY (FIXED LINK)
+# JOB 3: DEPLOY
 # ==========================================
   deploy:
     name: Deploy Report
