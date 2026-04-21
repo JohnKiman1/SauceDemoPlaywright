@@ -13,11 +13,17 @@ permissions:
   pages: write
   id-token: write
 
+# =========================
+# GLOBAL ENV SAFETY
+# =========================
+env:
+  CI: true
+
+jobs:
 
 # ==========================================
-# JOB 1: SETUP ENVIRONMENT (BROWSERS + CACHE)
+# JOB 0: SETUP (BROWSERS + CACHE + VALIDATION)
 # ==========================================
-jobs:
   setup:
     name: Setup Playwright Environment
     runs-on: ubuntu-latest
@@ -41,26 +47,33 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
 
       # =========================
-      # PLAYWRIGHT CACHE
+      # CACHE BROWSERS
       # =========================
       - name: Cache Playwright Browsers
+        id: pw-cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: pw-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+          key: pw-${{ runner.os }}-v3-${{ hashFiles('**/pnpm-lock.yaml') }}
 
       # =========================
-      # INSTALL BROWSERS ONCE
+      # INSTALL BROWSERS (SAFE + FULL)
       # =========================
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps chromium firefox webkit
 
+      # =========================
+      # VERIFY INSTALL
+      # =========================
+      - name: Verify Playwright install
+        run: pnpm exec playwright --version
+
 
 # ==========================================
-# JOB 2: TEST FARM (SHARDED EXECUTION)
+# JOB 1: TEST FARM (SHARDED EXECUTION)
 # ==========================================
   test:
-    name: Test Farm Shard ${{ matrix.shardIndex }}
+    name: Test Farm Shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     needs: setup
@@ -68,7 +81,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shardIndex: [1, 2]
+        shard: [1, 2]
 
     steps:
       - uses: actions/checkout@v4
@@ -89,19 +102,20 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
 
       # =========================
-      # RESTORE CACHE (NO REINSTALL)
+      # RESTORE BROWSERS CACHE
       # =========================
       - name: Restore Playwright Cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: pw-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+          key: pw-${{ runner.os }}-v3-${{ hashFiles('**/pnpm-lock.yaml') }}
 
       # =========================
-      # ENV
+      # ENV FILE (SAFE)
       # =========================
       - name: Create env
         run: |
+          mkdir -p storage
           cat <<EOF > .env
           BASE_URL=https://www.saucedemo.com
           USERNAME=standard_user
@@ -109,12 +123,19 @@ jobs:
           EOF
 
       # =========================
-      # TEST EXECUTION (FIXED SHARD)
+      # DEBUG (IMPORTANT FOR CI ISSUES)
+      # =========================
+      - name: Debug environment
+        run: |
+          echo "CI=$CI"
+          ls -la
+          ls -la storage || true
+
+      # =========================
+      # RUN TESTS (SHARDED SAFE)
       # =========================
       - name: Run tests
-        run: pnpm exec playwright test \
-          --shard=${{ matrix.shardIndex }}/2 \
-          --workers=1
+        run: pnpm exec playwright test --shard=${{ matrix.shard }}/2 --workers=1
         env:
           CI: true
 
@@ -125,13 +146,13 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: allure-results-${{ matrix.shardIndex }}
+          name: allure-results-${{ matrix.shard }}
           path: allure-results
           retention-days: 5
 
 
 # ==========================================
-# JOB 3: ALLURE REPORT
+# JOB 2: ALLURE REPORT (SAFE MERGE)
 # ==========================================
   allure-report:
     name: Allure Aggregation
@@ -158,7 +179,7 @@ jobs:
           merge-multiple: true
 
       # =========================
-      # VALIDATION SAFETY
+      # VALIDATION
       # =========================
       - name: Validate results exist
         run: |
@@ -168,7 +189,7 @@ jobs:
           fi
 
       # =========================
-      # HISTORY (OPTIONAL BUT SAFE)
+      # HISTORY (OPTIONAL SAFE)
       # =========================
       - name: Restore history
         run: |
@@ -182,6 +203,9 @@ jobs:
       - name: Generate Allure Report
         run: pnpm exec allure generate allure-results --clean -o allure-report
 
+      # =========================
+      # UPLOAD REPORT
+      # =========================
       - name: Upload Report
         uses: actions/upload-artifact@v4
         with:
@@ -190,7 +214,7 @@ jobs:
 
 
 # ==========================================
-# JOB 4: DEPLOY REPORT (GITHUB PAGES)
+# JOB 3: DEPLOY REPORT
 # ==========================================
   deploy:
     name: Deploy Report
