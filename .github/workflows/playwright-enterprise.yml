@@ -30,6 +30,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # =========================
+      # NODE + CACHE
+      # =========================
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -42,9 +45,21 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Playwright Browsers
-        run: pnpm exec playwright install --with-deps
+      # =========================
+      # PLAYWRIGHT BROWSER CACHE (FAST FIX)
+      # =========================
+      - name: Cache Playwright Browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-browsers-${{ runner.os }}
 
+      - name: Install Playwright Browsers (fast mode)
+        run: pnpm exec playwright install
+
+      # =========================
+      # ENV
+      # =========================
       - name: Create .env file
         run: |
           cat <<EOF > .env
@@ -56,11 +71,17 @@ jobs:
       - name: Ensure storage directory
         run: mkdir -p storage
 
+      # =========================
+      # TEST EXECUTION
+      # =========================
       - name: Run Playwright tests
         run: pnpm exec playwright test --shard=${{ matrix.shard }}/2
         env:
           CI: true
 
+      # =========================
+      # ARTIFACTS
+      # =========================
       - name: Upload Playwright Report
         if: always()
         uses: actions/upload-artifact@v4
@@ -79,7 +100,7 @@ jobs:
 
 
   # ==========================================
-  # JOB 2: BUILD ALLURE REPORT (STABLE)
+  # JOB 2: BUILD ALLURE REPORT (STABLE + HISTORY FIXED)
   # ==========================================
   allure-report:
     name: Allure Report (Merged)
@@ -109,16 +130,10 @@ jobs:
           path: allure-results-merged
           merge-multiple: true
 
-      # ==========================================
-      # SAFE HISTORY HANDLING (FIXED FINAL VERSION)
-      # ==========================================
-
       - name: Create history directory
         run: mkdir -p allure-results-merged/history
 
-      # ONLY attempt history restore on main
-      - name: Download Allure history (main only)
-        if: github.ref == 'refs/heads/main'
+      - name: Download Allure history (safe)
         uses: actions/download-artifact@v4
         with:
           name: allure-history
@@ -128,7 +143,6 @@ jobs:
       - name: Generate Allure Report
         run: pnpm exec allure generate allure-results-merged --clean -o allure-report
 
-      # Save history ONLY for main branch (safe guard)
       - name: Save Allure history
         if: github.ref == 'refs/heads/main'
         run: |
@@ -152,7 +166,7 @@ jobs:
 
 
   # ==========================================
-  # JOB 3: DEPLOY TO GITHUB PAGES (FIXED v4)
+  # JOB 3: DEPLOY TO GITHUB PAGES (FIXED)
   # ==========================================
   publish-report:
     name: Publish Allure Report
