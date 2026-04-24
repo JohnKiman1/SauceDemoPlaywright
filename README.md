@@ -227,10 +227,10 @@ await flows.checkout.completeOrder({
 
 ```yaml
 schedule:
-  - cron: "0 * * * *"
+  - cron: "1 2 * * 1"
 ```
 
-- Runs every hour
+- Runs every Monday at 2 AM
 - Enables regression detection
 - Supports trend-based analysis
 
