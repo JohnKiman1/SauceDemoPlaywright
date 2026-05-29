@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [ main, develop ]
   schedule:
-    - cron: "1 2 * * 1"
+    - cron: "*/10 * * * *" # Every 10 minutes
 
 permissions:
   contents: write
